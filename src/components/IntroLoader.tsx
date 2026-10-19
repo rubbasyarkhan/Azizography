@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import gsap from "gsap";
-import HelixSpiral from "./HelixSpiral";
+import IrisGallery from "./IrisGallery";
 import { ArrowRight } from "lucide-react";
 
 interface IntroLoaderProps {
@@ -12,7 +12,7 @@ interface IntroLoaderProps {
 
 export default function IntroLoader({ onComplete, forceShow = false }: IntroLoaderProps) {
   const [hasVisited, setHasVisited] = useState<boolean | null>(null);
-  const [spiralActive, setSpiralActive] = useState(false);
+  const [irisActive, setIrisActive] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const textStageRef = useRef<HTMLDivElement>(null);
@@ -62,19 +62,19 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
       opacity: 1,
       filter: "blur(0px)",
       scale: 1,
-      duration: 1.2,
+      duration: 1.1,
       ease: "power2.out",
-      delay: 0.3,
+      delay: 0.25,
     })
       // Calligraphic "and" stroke drawing
       .to(
         path,
         {
           strokeDashoffset: 0,
-          duration: 1.4,
+          duration: 1.2,
           ease: "power2.inOut",
         },
-        "-=0.9"
+        "-=0.8"
       )
       // Bottom caption & spinner reveal
       .to(
@@ -82,22 +82,22 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
         {
           opacity: 1,
           y: 0,
-          duration: 0.8,
+          duration: 0.7,
           ease: "power2.out",
         },
-        "-=0.7"
+        "-=0.6"
       )
-      // Brief pause to admire the Hollywood Exhibit title
-      .to({}, { duration: 0.9 })
+      // Brief pause to admire the text
+      .to({}, { duration: 0.8 })
 
-      // Phase 3: Split center fade away (Left goes left, Right goes right)
+      // Phase 3: Split center fade away (Left goes left, Right goes right through center)
       .to(
         leftGroupRef.current,
         {
-          x: -240,
+          x: -260,
           opacity: 0,
           filter: "blur(10px)",
-          duration: 0.85,
+          duration: 0.8,
           ease: "power3.inOut",
         },
         "splitExit"
@@ -105,10 +105,10 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
       .to(
         rightGroupRef.current,
         {
-          x: 240,
+          x: 260,
           opacity: 0,
           filter: "blur(10px)",
-          duration: 0.85,
+          duration: 0.8,
           ease: "power3.inOut",
         },
         "splitExit"
@@ -118,15 +118,15 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
         {
           opacity: 0,
           y: -10,
-          duration: 0.6,
+          duration: 0.5,
           ease: "power2.in",
         },
         "splitExit"
       )
 
-      // Phase 4: Trigger the 3D Paper Helix Spiral
+      // Phase 4: Trigger the Iris Gallery (Oval circling around and turning into an iris)
       .call(() => {
-        setSpiralActive(true);
+        setIrisActive(true);
       });
 
     return () => {
@@ -134,15 +134,15 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
     };
   }, [hasVisited]);
 
-  // Handle completion after the 2-second helix spiral completes
-  const handleHelixComplete = () => {
+  // Handle completion after Iris Gallery circling and iris morph
+  const handleIrisComplete = () => {
     if (!containerRef.current) return;
 
     gsap.to(containerRef.current, {
       opacity: 0,
       scale: 1.15,
       filter: "blur(14px)",
-      duration: 0.8,
+      duration: 0.9,
       ease: "power3.inOut",
       onComplete: () => {
         sessionStorage.setItem("azizography_intro_seen", "true");
@@ -179,7 +179,7 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
       ref={containerRef}
       className="fixed inset-0 z-50 bg-black text-white flex flex-col justify-between overflow-hidden select-none"
     >
-      {/* Top-Left Circular Progress Dot (Matching Screenshot 1 & 2) */}
+      {/* Top-Left Circular Progress Dot (Matching Screenshot 1) */}
       <div className="absolute top-8 left-8 sm:top-12 sm:left-12 z-40 flex items-center gap-3">
         <div className="relative w-5 h-5 flex items-center justify-center">
           <div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
@@ -208,7 +208,7 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
         className="relative z-20 my-auto w-full flex flex-col items-center justify-center px-4"
       >
         <div className="flex flex-col items-center max-w-5xl w-full">
-          {/* Top Line: THE ELLE (or THE AZIZ) */}
+          {/* Top Line: THE ELLE & ESQUIRE */}
           <div className="flex items-center justify-center w-full">
             <div ref={leftGroupRef} className="flex flex-col items-end mr-2 sm:mr-3">
               <div className="flex items-start gap-2 sm:gap-4">
@@ -247,7 +247,7 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
             </div>
           </div>
 
-          {/* Bottom Grand Word: HOLLYWOOD (Exact match to screenshot 1) */}
+          {/* Bottom Grand Word: HOLLYWOOD */}
           <div className="w-full flex justify-center -mt-[2%] sm:-mt-[3%]">
             <span className="font-serif-elegant text-5xl sm:text-8xl md:text-9xl lg:text-[11.5rem] font-light tracking-[0.07em] uppercase text-white leading-[0.88] select-none">
               HOLLYWOOD
@@ -267,7 +267,7 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
             <p className="text-white font-medium not-italic">New York City</p>
           </div>
 
-          {/* Minimal Spinning Ring Loader (Exact match to screenshot 1) */}
+          {/* Minimal Spinning Ring Loader */}
           <svg
             className="animate-spin"
             width="22"
@@ -284,8 +284,8 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
         </div>
       </div>
 
-      {/* Helix Gallery: 3D Paper-Curled Spinning Image Spiral */}
-      <HelixSpiral active={spiralActive} onComplete={handleHelixComplete} />
+      {/* Iris Gallery: Oval of photos circling around and turning into an iris */}
+      <IrisGallery active={irisActive} onComplete={handleIrisComplete} />
     </div>
   );
 }
