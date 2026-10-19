@@ -41,18 +41,18 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
   const animFrameIdRef = useRef<number | null>(null);
   const baseAngleRef = useRef(0);
-  const [dimensions, setDimensions] = useState({ rx: 420, ry: 190, cardW: 76, cardH: 102 });
+  const [dimensions, setDimensions] = useState({ rx: 440, ry: 190, cardW: 78, cardH: 104 });
 
   // Responsive oval dimensions
   useEffect(() => {
     const updateDimensions = () => {
       const w = window.innerWidth;
       if (w < 640) {
-        setDimensions({ rx: 160, ry: 85, cardW: 46, cardH: 62 });
+        setDimensions({ rx: 165, ry: 85, cardW: 46, cardH: 62 });
       } else if (w < 1024) {
-        setDimensions({ rx: 300, ry: 140, cardW: 64, cardH: 86 });
+        setDimensions({ rx: 310, ry: 140, cardW: 64, cardH: 86 });
       } else {
-        setDimensions({ rx: 440, ry: 190, cardW: 78, cardH: 104 });
+        setDimensions({ rx: 450, ry: 195, cardW: 78, cardH: 104 });
       }
     };
     updateDimensions();
@@ -65,26 +65,27 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
     if (!active) return;
 
     const startTime = performance.now();
-    const totalDuration = 3200; // Total run duration before transitioning to home page
+    const totalDuration = 3400; // Duration of active animation before initiating exit fade
 
     const animate = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / totalDuration);
 
-      // Speed increases slightly as iris forms
-      const speed = 0.007 + progress * 0.006;
+      // Smooth constant angular rotation
+      const speed = 0.0075 + progress * 0.004;
       baseAngleRef.current += speed;
 
-      // Iris morph factor: 0 = horizontal oval, 1 = camera aperture iris circle
-      // Morph starts at 1.0s and smoothly transforms into camera iris
-      const irisMorph = Math.max(0, Math.min(1, (elapsed - 900) / 1200));
-      // Ease in-out
-      const easedMorph = irisMorph < 0.5 
-        ? 2 * irisMorph * irisMorph 
-        : 1 - Math.pow(-2 * irisMorph + 2, 2) / 2;
+      // Iris morph starts smoothly at 1000ms
+      const morphProgress = Math.max(0, Math.min(1, (elapsed - 1000) / 1400));
+      // Buttery smooth ease-in-out
+      const easedMorph = morphProgress < 0.5 
+        ? 2 * morphProgress * morphProgress 
+        : 1 - Math.pow(-2 * morphProgress + 2, 2) / 2;
 
-      const currentRx = dimensions.rx * (1 - easedMorph) + (dimensions.rx * 0.65) * easedMorph;
-      const currentRy = dimensions.ry * (1 - easedMorph) + (dimensions.rx * 0.65) * easedMorph;
+      // Interpolate oval radii into circular iris radius
+      const targetCircleR = dimensions.rx * 0.62;
+      const currentRx = dimensions.rx * (1 - easedMorph) + targetCircleR * easedMorph;
+      const currentRy = dimensions.ry * (1 - easedMorph) + targetCircleR * easedMorph;
 
       const numCards = IRIS_PHOTOS.length;
 
@@ -92,15 +93,15 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
         const cardEl = cardsRef.current[i];
         if (!cardEl) continue;
 
-        // Angle for this card around the oval
+        // Angle around the oval
         const theta = baseAngleRef.current + (i * 2 * Math.PI) / numCards;
         const x = Math.cos(theta) * currentRx;
         const y = Math.sin(theta) * currentRy;
 
-        // Upright when oval, tilts tangentially like camera iris aperture blades when morphing
+        // Tangential tilt into iris aperture blades
         const bladeTilt = easedMorph * ((theta * 180) / Math.PI + 35);
 
-        // Z-Index layering based on Y position (cards at bottom layer over top cards)
+        // Z-Index layering based on Y elevation
         const zIndex = Math.round((Math.sin(theta) + 1) * 50);
 
         cardEl.style.transform = `translate3d(${x}px, ${y}px, 0px) rotate(${bladeTilt}deg)`;
@@ -110,7 +111,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
       if (elapsed < totalDuration) {
         animFrameIdRef.current = requestAnimationFrame(animate);
       } else {
-        // Complete and reveal home page
+        // Trigger completion callback
         onComplete?.();
       }
     };
@@ -129,11 +130,14 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden bg-black select-none pointer-events-none"
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden bg-[#070707] select-none pointer-events-none"
     >
+      {/* Subtle background ambient glow */}
+      <div className="absolute w-[600px] h-[340px] rounded-full bg-white/[0.02] blur-[100px] pointer-events-none" />
+
       {/* Title & Subtitle Requested by User */}
-      <div className="absolute top-14 sm:top-20 z-40 text-center flex flex-col items-center gap-1.5 animate-fade-in">
-        <h2 className="font-serif-elegant text-2xl sm:text-4xl md:text-5xl font-light text-white tracking-[0.06em] uppercase">
+      <div className="absolute top-12 sm:top-20 z-40 text-center flex flex-col items-center gap-2">
+        <h2 className="font-serif-elegant text-3xl sm:text-4xl md:text-5xl font-light text-white tracking-[0.06em] uppercase">
           Iris Gallery
         </h2>
         <p className="font-mono-brutal text-[11px] sm:text-xs text-neutral-400 tracking-widest uppercase">
@@ -153,12 +157,12 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
           >
             {/* Rounded Portrait Card matching the screenshot */}
             <div
-              className="relative overflow-hidden bg-neutral-900 border border-white/20 shadow-2xl transition-shadow duration-300"
+              className="relative overflow-hidden bg-neutral-900 border border-white/20 shadow-2xl transition-all duration-300"
               style={{
                 width: `${dimensions.cardW}px`,
                 height: `${dimensions.cardH}px`,
                 borderRadius: "18px",
-                boxShadow: "0 14px 28px rgba(0,0,0,0.85), 0 4px 8px rgba(0,0,0,0.5)",
+                boxShadow: "0 16px 32px rgba(0,0,0,0.85), 0 4px 10px rgba(0,0,0,0.5)",
               }}
             >
               <Image
@@ -170,7 +174,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
                 priority
               />
 
-              {/* Subtle glass reflection highlight */}
+              {/* Glass sheen highlight */}
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/10" />
             </div>
           </div>

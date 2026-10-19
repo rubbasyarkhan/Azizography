@@ -79,11 +79,11 @@ export default function Header({ onReplayIntro, onOpenBooking }: HeaderProps) {
           {onReplayIntro && (
             <button
               onClick={onReplayIntro}
-              title="Replay Hollywood Exhibit 2026 Intro"
+              title="Replay Iris Gallery Animation"
               className="px-2.5 py-1 text-[10px] uppercase tracking-widest text-neutral-400 hover:text-white border border-white/10 hover:border-white/30 transition-all flex items-center gap-1.5"
             >
               <Sparkles className="w-3 h-3 text-red-500" />
-              <span>Intro</span>
+              <span>Iris Gallery</span>
             </button>
           )}
 
