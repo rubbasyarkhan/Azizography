@@ -20,6 +20,10 @@ export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey.length > 10
 );
 
+// Only initialize Firebase Cloud Storage if explicitly enabled
+// Prevents preflight 404 & CORS errors when Cloud Storage is not enabled on free tier
+export const isStorageEnabled = process.env.NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE === "true";
+
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
@@ -31,7 +35,13 @@ if (typeof window !== "undefined" || isFirebaseConfigured) {
       app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app);
-      storage = getStorage(app);
+      if (isStorageEnabled) {
+        try {
+          storage = getStorage(app);
+        } catch (storageErr) {
+          console.warn("Firebase Storage is not enabled; using URL-based images:", storageErr);
+        }
+      }
     }
   } catch (err) {
     console.warn("Firebase initialization warning (falling back to demo mode):", err);

@@ -60,6 +60,20 @@ function SortableImageCard({
   onDeleteItem?: (id: string) => void;
   onToggleIris?: (item: GalleryItem) => void;
 }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Compute exact aspect ratio string to prevent any Cumulative Layout Shift (CLS)
+  const aspectRatioStyle = React.useMemo(() => {
+    if (item.width && item.height) {
+      return `${item.width} / ${item.height}`;
+    }
+    if (item.aspectRatio === "portrait") return "3 / 4";
+    if (item.aspectRatio === "landscape") return "16 / 9";
+    if (item.aspectRatio === "tall") return "9 / 16";
+    if (item.aspectRatio === "square") return "1 / 1";
+    return undefined;
+  }, [item.width, item.height, item.aspectRatio]);
+
   const {
     attributes,
     listeners,
@@ -74,6 +88,8 @@ function SortableImageCard({
     transition,
   };
 
+  const isLcpCandidate = index < 2;
+
   return (
     <div
       ref={setNodeRef}
@@ -82,14 +98,24 @@ function SortableImageCard({
         isDragging ? "opacity-30 scale-[0.98] z-30" : "opacity-100"
       }`}
     >
-      {/* Raw Sized Photograph Container */}
+      {/* Raw Sized Photograph Container with strict aspect ratio reservation to prevent CLS */}
       <div
         onClick={() => {
           if (!isDragging) {
             onOpenLightbox(item);
           }
         }}
-        className="relative w-full overflow-hidden bg-[#f0ede6]/50 cursor-pointer shadow-sm hover:shadow-md transition-shadow duration-300"
+        style={{
+          ...(aspectRatioStyle ? { aspectRatio: aspectRatioStyle } : {}),
+          ...(item.blurDataUrl
+            ? {
+                backgroundImage: `url(${item.blurDataUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : {}),
+        }}
+        className="relative w-full overflow-hidden bg-[#161616] cursor-pointer shadow-sm hover:shadow-md transition-shadow duration-300"
       >
         {/* Full Height & Width Raw Image (Optimized, compressed, and lazy loaded) */}
         <img
@@ -97,9 +123,13 @@ function SortableImageCard({
           srcSet={getResponsiveSrcSet(item.imageUrl, [380, 680, 950])}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           alt={item.title}
-          loading={index < 6 ? "eager" : "lazy"}
+          loading={isLcpCandidate ? "eager" : "lazy"}
+          fetchPriority={isLcpCandidate ? "high" : undefined}
           decoding="async"
-          className="w-full h-auto block object-contain transition-transform duration-500 ease-out group-hover:scale-[1.015]"
+          onLoad={() => setImageLoaded(true)}
+          className={`w-full h-auto block object-cover transition-all duration-500 ease-out group-hover:scale-[1.015] ${
+            imageLoaded ? "opacity-100" : "opacity-0"
+          }`}
         />
 
         {/* Minimal Editorial Overlay on Hover */}

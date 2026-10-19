@@ -18,6 +18,7 @@ export interface GalleryItem {
   aspectRatio?: 'portrait' | 'landscape' | 'square' | 'tall';
   width?: number;
   height?: number;
+  blurDataUrl?: string;
   exif?: {
     camera?: string;
     lens?: string;

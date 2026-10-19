@@ -9,6 +9,11 @@ import {
   uploadImageFile,
 } from "@/lib/gallery-service";
 import {
+  convertAndCompressToWebP,
+  formatBytes,
+  WebPConversionResult,
+} from "@/lib/image-utils";
+import {
   X,
   Sparkles,
   Upload,
@@ -17,6 +22,7 @@ import {
   Play,
   Loader2,
   Image as ImageIcon,
+  CheckCircle2,
 } from "lucide-react";
 
 interface IrisManagerModalProps {
@@ -37,6 +43,8 @@ export default function IrisManagerModal({
   const [newSeries, setNewSeries] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [conversionStats, setConversionStats] = useState<WebPConversionResult | null>(null);
+  const [converting, setConverting] = useState(false);
   const [externalUrl, setExternalUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -51,14 +59,30 @@ export default function IrisManagerModal({
     await updateGalleryItem(item.id, { isIrisItem: nextVal });
   };
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file (JPEG, PNG, WebP).");
+      setError("Please select a valid image file (JPEG, PNG, WebP, etc.).");
       return;
     }
     setError(null);
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
+    setConverting(true);
+    try {
+      const result = await convertAndCompressToWebP(file, {
+        maxWidth: 1920,
+        maxHeight: 1920,
+        quality: 0.82,
+      });
+      setSelectedFile(result.file);
+      setPreviewUrl(result.dataUrl);
+      setConversionStats(result);
+    } catch (err: unknown) {
+      console.warn("Iris WebP conversion error:", err);
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      setConversionStats(null);
+    } finally {
+      setConverting(false);
+    }
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
@@ -78,10 +102,15 @@ export default function IrisManagerModal({
     try {
       let finalUrl = "";
       let storagePath = "";
+      let itemWidth = conversionStats?.width;
+      let itemHeight = conversionStats?.height;
+
       if (selectedFile) {
         const res = await uploadImageFile(selectedFile);
         finalUrl = res.imageUrl;
         storagePath = res.storagePath;
+        if (res.width) itemWidth = res.width;
+        if (res.height) itemHeight = res.height;
       } else {
         finalUrl = externalUrl.trim();
         storagePath = "iris-external";
@@ -93,6 +122,9 @@ export default function IrisManagerModal({
         category: "people",
         imageUrl: finalUrl,
         storagePath,
+        width: itemWidth,
+        height: itemHeight,
+        blurDataUrl: conversionStats?.blurDataUrl,
         isFeatured: true,
         isVisible: true,
         isIrisItem: true, // Automatically active in Iris!
@@ -104,6 +136,7 @@ export default function IrisManagerModal({
       setNewSeries("");
       setSelectedFile(null);
       setPreviewUrl(null);
+      setConversionStats(null);
       setExternalUrl("");
       setShowUploadForm(false);
     } catch (err: unknown) {
@@ -242,7 +275,7 @@ export default function IrisManagerModal({
                 </label>
                 <div className="flex gap-3">
                   <div
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => !converting && fileInputRef.current?.click()}
                     className="flex-1 border border-dashed border-white/20 hover:border-white p-3 text-center cursor-pointer flex flex-col items-center justify-center min-h-[90px] bg-neutral-900/50"
                   >
                     <input
@@ -254,18 +287,36 @@ export default function IrisManagerModal({
                       }
                       className="hidden"
                     />
-                    {previewUrl ? (
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-400" />
-                        <span className="text-white text-[11px] truncate max-w-[150px]">
-                          {selectedFile?.name}
+                    {converting ? (
+                      <div className="flex flex-col items-center gap-1.5 py-1">
+                        <Loader2 className="w-4 h-4 text-red-500 animate-spin" />
+                        <span className="text-[10px] text-neutral-300 font-mono">
+                          Converting to WebP...
                         </span>
+                      </div>
+                    ) : previewUrl ? (
+                      <div className="flex flex-col items-center text-center gap-1">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[10px] uppercase">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>WebP Ready</span>
+                        </div>
+                        {conversionStats ? (
+                          <div className="text-[9px] text-neutral-400 font-mono">
+                            <span>{formatBytes(conversionStats.originalSize)}</span>
+                            <span className="text-emerald-400 font-bold"> → {formatBytes(conversionStats.compressedSize)}</span>
+                            <span className="text-emerald-400"> (-{conversionStats.compressionRatio}%)</span>
+                          </div>
+                        ) : (
+                          <span className="text-white text-[11px] truncate max-w-[150px]">
+                            {selectedFile?.name}
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <>
                         <Upload className="w-4 h-4 text-neutral-400 mb-1" />
                         <span className="text-[10px] text-neutral-400 uppercase tracking-wider">
-                          Click to select image file
+                          Upload file (Auto WebP & compress)
                         </span>
                       </>
                     )}

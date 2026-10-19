@@ -5,6 +5,11 @@ import Image from "next/image";
 import { GalleryItem, GalleryCategory } from "@/types/gallery";
 import { uploadImageFile, createGalleryItem } from "@/lib/gallery-service";
 import {
+  convertAndCompressToWebP,
+  formatBytes,
+  WebPConversionResult,
+} from "@/lib/image-utils";
+import {
   Upload,
   Image as ImageIcon,
   X,
@@ -22,6 +27,8 @@ interface ImageUploaderProps {
 export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [conversionStats, setConversionStats] = useState<WebPConversionResult | null>(null);
+  const [converting, setConverting] = useState(false);
   const [externalUrl, setExternalUrl] = useState<string>("");
   const [useExternalUrl, setUseExternalUrl] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -48,15 +55,46 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file (JPEG, PNG, WebP).");
+      setError("Please select a valid image file (JPEG, PNG, WebP, AVIF, TIFF, etc.).");
       return;
     }
     setError(null);
-    setSelectedFile(file);
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
+    setConverting(true);
+
+    try {
+      // Convert any uploaded image format to optimized WebP and compress
+      const result = await convertAndCompressToWebP(file, {
+        maxWidth: 1920,
+        maxHeight: 1920,
+        quality: 0.82,
+      });
+
+      setSelectedFile(result.file);
+      setPreviewUrl(result.dataUrl);
+      setConversionStats(result);
+
+      // Auto-detect optimal aspect ratio based on natural image dimensions
+      const ratio = result.width / result.height;
+      if (ratio > 1.25) {
+        setAspectRatio("landscape");
+      } else if (ratio < 0.65) {
+        setAspectRatio("tall");
+      } else if (ratio >= 0.88 && ratio <= 1.12) {
+        setAspectRatio("square");
+      } else {
+        setAspectRatio("portrait");
+      }
+    } catch (err: unknown) {
+      console.warn("Client WebP conversion fallback:", err);
+      // Fallback
+      setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      setConversionStats(null);
+    } finally {
+      setConverting(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -88,11 +126,15 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
     try {
       let finalImageUrl = "";
       let finalStoragePath = "";
+      let itemWidth = conversionStats?.width;
+      let itemHeight = conversionStats?.height;
 
       if (selectedFile) {
         const uploadResult = await uploadImageFile(selectedFile);
         finalImageUrl = uploadResult.imageUrl;
         finalStoragePath = uploadResult.storagePath;
+        if (uploadResult.width) itemWidth = uploadResult.width;
+        if (uploadResult.height) itemHeight = uploadResult.height;
       } else {
         finalImageUrl = externalUrl.trim();
         finalStoragePath = "external-url";
@@ -109,6 +151,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         category,
         imageUrl: finalImageUrl,
         storagePath: finalStoragePath,
+        width: itemWidth,
+        height: itemHeight,
+        blurDataUrl: conversionStats?.blurDataUrl,
         isFeatured,
         isVisible: true,
         isIrisItem,
@@ -166,7 +211,17 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         {/* Dropzone & Preview Row */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           <div className="md:col-span-6">
-            {!previewUrl && !externalUrl ? (
+            {converting ? (
+              <div className="w-full h-64 border-2 border-dashed border-red-500/50 bg-[#151515] flex flex-col items-center justify-center p-6 text-center">
+                <Loader2 className="w-8 h-8 text-red-500 animate-spin mb-3" />
+                <span className="font-bold text-white uppercase tracking-wider block mb-1">
+                  CONVERTING TO WEBP & COMPRESSING...
+                </span>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest">
+                  Auto-optimizing dimensions & format
+                </span>
+              </div>
+            ) : !previewUrl && !externalUrl ? (
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
@@ -175,10 +230,10 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
               >
                 <Upload className="w-8 h-8 text-neutral-400 group-hover:text-white group-hover:scale-110 transition-all mb-3" />
                 <span className="font-bold text-white uppercase tracking-wider block mb-1">
-                  DROP HIGH-RES IMAGE HERE
+                  DROP ANY IMAGE HERE
                 </span>
                 <span className="text-[10px] text-neutral-500 uppercase">
-                  OR CLICK TO BROWSE FILES (JPG, PNG, WEBP)
+                  JPEG, PNG, HEIC, TIFF, AVIF → AUTO-CONVERT TO WEBP & COMPRESS
                 </span>
                 <input
                   ref={fileInputRef}
@@ -191,24 +246,60 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                 />
               </div>
             ) : (
-              <div className="relative w-full h-64 bg-black border border-white/20 overflow-hidden">
-                <Image
-                  src={previewUrl || externalUrl}
-                  alt="Preview"
-                  fill
-                  className="object-contain"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setPreviewUrl(null);
-                    setExternalUrl("");
-                  }}
-                  className="absolute top-2 right-2 p-1.5 bg-black/80 text-white border border-white/20 hover:bg-red-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              <div className="space-y-2">
+                <div className="relative w-full h-64 bg-black border border-white/20 overflow-hidden">
+                  <Image
+                    src={previewUrl || externalUrl}
+                    alt="Preview"
+                    fill
+                    className="object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setPreviewUrl(null);
+                      setConversionStats(null);
+                      setExternalUrl("");
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-black/80 text-white border border-white/20 hover:bg-red-600 transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* WebP Compression Statistics Metric Card */}
+                {conversionStats && (
+                  <div className="p-2.5 bg-black/80 border border-emerald-500/40 text-emerald-300">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        CONVERTED TO WEBP (COMPRESSED)
+                      </span>
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 border border-emerald-500/40 uppercase">
+                        -{conversionStats.compressionRatio}% SIZE REDUCED
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] pt-1.5 border-t border-emerald-500/20 text-neutral-300">
+                      <div>
+                        <span className="text-neutral-500 block text-[9px] uppercase">Original:</span>
+                        <span className="font-mono">{formatBytes(conversionStats.originalSize)}</span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-500 block text-[9px] uppercase">WebP:</span>
+                        <span className="font-mono text-emerald-400 font-bold">
+                          {formatBytes(conversionStats.compressedSize)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-500 block text-[9px] uppercase">Dims:</span>
+                        <span className="font-mono">
+                          {conversionStats.width}×{conversionStats.height}px
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -109,9 +109,10 @@ export default function LightboxModal({
         >
           <div className="relative flex flex-col items-center justify-center max-w-[90vw] max-h-[75vh]">
             <img
-              src={item.imageUrl}
+              src={getOptimizedImageUrl(item.imageUrl, 1400, 80)}
               alt={item.title}
               decoding="sync"
+              fetchPriority="high"
               className="max-h-[62vh] max-w-[85vw] object-contain shadow-2xl rounded"
             />
             <div className="mt-4 text-center">

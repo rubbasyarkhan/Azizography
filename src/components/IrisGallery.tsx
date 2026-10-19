@@ -144,10 +144,8 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
 
         // Subtle individual tilt keeping portraits upright
         const individualTilt = Math.sin(theta) * 10 * (1 - easeExpand * 0.6) + bladeTilt;
-        const zIndex = Math.round((Math.sin(theta) + 1) * 50);
 
         cardEl.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), 0px) rotate(${individualTilt.toFixed(2)}deg) scale(${cardScale.toFixed(3)})`;
-        cardEl.style.zIndex = String(zIndex);
         cardEl.style.opacity = irisOpacity.toFixed(3);
       }
 
@@ -232,7 +230,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
                   fill
                   sizes="180px"
                   className="object-cover pointer-events-none"
-                  priority={i < 12}
+                  priority={i < 2}
                 />
 
                 {/* Subtle glass gloss overlay */}

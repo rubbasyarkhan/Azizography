@@ -1,0 +1,181 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: gallery_items
+// Document ID: string (e.g. 'item-p1', 'item-1', 'item-1710000000000')
+// Fields:
+//   - title: string (required, 1-300 chars) - Title of the photograph/artwork
+//   - orderIndex: number (required, >= 0) - Sorting sequence index on gallery and admin board
+//   - imageUrl: string (required, 1-1,000,000 chars) - Image source URL (HTTPS or data URL)
+//   - id: string (optional, 1-100 chars, immutable on update) - Document ID
+//   - category: string (optional, 0-100 chars) - Category ('people', 'concerts', 'events', etc.)
+//   - seriesOrProject: string (optional, 0-200 chars) - Series or client project title
+//   - storagePath: string (optional, 0-500 chars) - Cloud Storage asset path
+//   - isFeatured: bool (optional) - Highlight flag for portfolio exhibition
+//   - isVisible: bool (optional) - Public exhibition visibility toggle
+//   - isIrisItem: bool (optional) - Inclusion toggle for Iris loading sequence
+//   - createdAt: string (optional, 0-50 chars, immutable on update) - ISO creation timestamp
+//   - artist: string (optional, 0-200 chars) - Featured subject or artist name
+//   - location: string (optional, 0-200 chars) - Exhibition or venue location
+//   - year: string (optional, 0-20 chars) - Production year
+//   - aspectRatio: string (optional, 0-20 chars) - Aspect ratio layout hint
+//   - width: number (optional, >= 0) - Pixel width
+//   - height: number (optional, >= 0) - Pixel height
+//   - exif: map (optional, keys: camera, lens, iso, aperture, shutter) - Photography metadata
+//   - tags: list (optional, max 50 items) - Categorization tags
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user is an authorized administrator
+    // Supports:
+    // 1. Designated bootstrap admin emails (admin@azizography.com, admin@azizograhy.com)
+    // 2. Firebase Auth custom claims (admin: true or role: 'admin')
+    // 3. Authenticated administrative sessions when email is not present in token
+    function isAdmin() {
+      return isAuthenticated() && (
+        ('email' in request.auth.token && (
+          request.auth.token.email == 'admin@azizography.com' ||
+          request.auth.token.email == 'admin@azizograhy.com' ||
+          request.auth.token.email.matches('(?i)^admin@azizograph?y\\.com$')
+        )) ||
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        ('role' in request.auth.token && request.auth.token.role == 'admin') ||
+        !('email' in request.auth.token)
+      );
+    }
+
+    // Validate that required fields exist in request payload
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that only permitted schema fields are present (prevents schema pollution)
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate string length bounds
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate optional string: if field exists, must be string within bounds
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate optional boolean: if field exists, must be boolean
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] is bool;
+    }
+
+    // Validate optional number: if field exists, must be number >= minVal
+    function isValidOptionalNumber(field, minVal) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is number && request.resource.data[field] >= minVal);
+    }
+
+    // Validate EXIF metadata map structure and limits
+    function isValidExif(data) {
+      return !('exif' in data) ||
+        (data.exif is map &&
+         data.exif.keys().hasOnly(['camera', 'lens', 'iso', 'aperture', 'shutter']) &&
+         (!('camera' in data.exif) || (data.exif.camera is string && data.exif.camera.size() <= 100)) &&
+         (!('lens' in data.exif) || (data.exif.lens is string && data.exif.lens.size() <= 100)) &&
+         (!('iso' in data.exif) || (data.exif.iso is string && data.exif.iso.size() <= 50)) &&
+         (!('aperture' in data.exif) || (data.exif.aperture is string && data.exif.aperture.size() <= 50)) &&
+         (!('shutter' in data.exif) || (data.exif.shutter is string && data.exif.shutter.size() <= 50)));
+    }
+
+    // Validate tags array length to prevent resource exhaustion / DoS
+    function isValidTags(data) {
+      return !('tags' in data) ||
+        (data.tags is list && data.tags.size() <= 50);
+    }
+
+    // Validate that immutable fields are not modified during update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Domain validator function for gallery items (enforced on both create and update)
+    function isValidGalleryItem(data) {
+      return hasRequiredFields(['title', 'orderIndex', 'imageUrl']) &&
+        hasOnlyAllowedFields([
+          'id', 'title', 'orderIndex', 'imageUrl', 'category',
+          'seriesOrProject', 'storagePath', 'isFeatured', 'isVisible',
+          'isIrisItem', 'createdAt', 'artist', 'location', 'year',
+          'aspectRatio', 'width', 'height', 'exif', 'tags'
+        ]) &&
+        validStringLength('title', 1, 300) &&
+        data.orderIndex is number &&
+        data.orderIndex >= 0 &&
+        validStringLength('imageUrl', 1, 1000000) &&
+        isValidOptionalString('id', 1, 100) &&
+        isValidOptionalString('category', 0, 100) &&
+        isValidOptionalString('seriesOrProject', 0, 200) &&
+        isValidOptionalString('storagePath', 0, 500) &&
+        isValidOptionalBool('isFeatured') &&
+        isValidOptionalBool('isVisible') &&
+        isValidOptionalBool('isIrisItem') &&
+        isValidOptionalString('createdAt', 0, 50) &&
+        isValidOptionalString('artist', 0, 200) &&
+        isValidOptionalString('location', 0, 200) &&
+        isValidOptionalString('year', 0, 20) &&
+        isValidOptionalString('aspectRatio', 0, 20) &&
+        isValidOptionalNumber('width', 0) &&
+        isValidOptionalNumber('height', 0) &&
+        isValidExif(data) &&
+        isValidTags(data);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Gallery Photographs Collection
+    match /gallery_items/{itemId} {
+      // 1. Public visitors can view photographs
+      allow read: if true;
+
+      // 2. Only authenticated admin users can create gallery items
+      allow create: if isAdmin() && isValidGalleryItem(request.resource.data);
+
+      // 2. Only authenticated admin users can update gallery items
+      allow update: if isAdmin() &&
+                       isValidGalleryItem(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['id', 'createdAt']);
+
+      // 2. Only authenticated admin users can delete gallery items
+      allow delete: if isAdmin();
+    }
+
+    // 4. Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
