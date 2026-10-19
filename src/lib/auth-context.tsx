@@ -27,7 +27,18 @@ const AuthContext = createContext<AuthContextType>({
   isFirebaseActive: false,
 });
 
-const DEFAULT_ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@azizograhy.com";
+const VALID_ADMIN_EMAILS = [
+  (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim(),
+  "admin@azizography.com",
+  "admin@azizograhy.com",
+].filter(Boolean);
+
+function isValidAdmin(email: string): boolean {
+  if (!email) return false;
+  return VALID_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
+const DEFAULT_ADMIN_EMAIL = "admin@azizography.com";
 const DEFAULT_ADMIN_PASS = "azizography123";
 const AUTH_STORAGE_KEY = "azizography_auth_session";
 
@@ -82,11 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const error = err as Error;
         console.warn("Firebase sign in error, evaluating demo bypass:", error);
         // If credentials match default credentials, allow demo access
-        if (
-          email.toLowerCase().trim() === DEFAULT_ADMIN_EMAIL.toLowerCase().trim() &&
-          pass === DEFAULT_ADMIN_PASS
-        ) {
-          const demoUser = { email: DEFAULT_ADMIN_EMAIL, uid: "demo-admin-uid-99" };
+        if (isValidAdmin(email) && pass === DEFAULT_ADMIN_PASS) {
+          const demoUser = { email: email.trim(), uid: "demo-admin-uid-99" };
           setUser(demoUser);
           sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
           return { success: true };
@@ -96,11 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Local Mock / Demo Auth
-    if (
-      email.toLowerCase().trim() === DEFAULT_ADMIN_EMAIL.toLowerCase().trim() &&
-      pass === DEFAULT_ADMIN_PASS
-    ) {
-      const demoUser = { email: DEFAULT_ADMIN_EMAIL, uid: "demo-admin-uid-99" };
+    if (isValidAdmin(email) && pass === DEFAULT_ADMIN_PASS) {
+      const demoUser = { email: email.trim(), uid: "demo-admin-uid-99" };
       setUser(demoUser);
       sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
       return { success: true };
@@ -108,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return {
       success: false,
-      error: "Invalid email or password. Use default: admin@azizograhy.com / azizography123",
+      error: "Invalid email or password. Use: admin@azizography.com / azizography123",
     };
   };
 
@@ -124,9 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  const isAdmin = Boolean(
-    user && user.email.toLowerCase().trim() === DEFAULT_ADMIN_EMAIL.toLowerCase().trim()
-  );
+  const isAdmin = Boolean(user && isValidAdmin(user.email));
 
   return (
     <AuthContext.Provider

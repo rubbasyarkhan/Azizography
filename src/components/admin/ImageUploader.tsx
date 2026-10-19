@@ -34,7 +34,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [location, setLocation] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [aspectRatio, setAspectRatio] = useState<"portrait" | "landscape" | "square" | "tall">("portrait");
+  const [seriesOrProject, setSeriesOrProject] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isIrisItem, setIsIrisItem] = useState(false);
   const [tagsString, setTagsString] = useState("");
 
   // EXIF
@@ -103,11 +105,13 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
       await createGalleryItem({
         title: title.trim(),
+        seriesOrProject: seriesOrProject.trim() || undefined,
         category,
         imageUrl: finalImageUrl,
         storagePath: finalStoragePath,
         isFeatured,
         isVisible: true,
+        isIrisItem,
         artist: artist.trim() || undefined,
         location: location.trim() || undefined,
         year: year.trim() || undefined,
@@ -246,6 +250,19 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
               />
             </div>
 
+            <div>
+              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
+                Series / Project / Story (Appears in Sidebar)
+              </label>
+              <input
+                type="text"
+                value={seriesOrProject}
+                onChange={(e) => setSeriesOrProject(e.target.value)}
+                placeholder="E.G. Netflix x The Four Seasons, Taika Waititi for WIRED..."
+                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs focus:outline-none focus:border-white"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
@@ -256,6 +273,7 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                   onChange={(e) => setCategory(e.target.value as GalleryCategory)}
                   className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
                 >
+                  <option value="people">People / Editorial</option>
                   <option value="concerts">Concerts</option>
                   <option value="singers">Singers</option>
                   <option value="weddings">Weddings</option>
@@ -394,8 +412,8 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
             />
           </div>
 
-          <div className="sm:col-span-4 flex items-end">
-            <label className="flex items-center gap-2 cursor-pointer p-2.5 border border-white/10 bg-[#181818] w-full">
+          <div className="sm:col-span-4 flex flex-col gap-2 justify-end">
+            <label className="flex items-center gap-2 cursor-pointer p-2 border border-white/10 bg-[#181818] w-full">
               <input
                 type="checkbox"
                 checked={isFeatured}
@@ -404,6 +422,18 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
               />
               <span className="text-[10px] uppercase font-bold text-neutral-300">
                 Feature on Hero
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer p-2 border border-white/10 bg-[#181818] w-full">
+              <input
+                type="checkbox"
+                checked={isIrisItem}
+                onChange={(e) => setIsIrisItem(e.target.checked)}
+                className="accent-red-600 w-4 h-4"
+              />
+              <span className="text-[10px] uppercase font-bold text-red-400">
+                ★ Include in Iris Animation
               </span>
             </label>
           </div>

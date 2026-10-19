@@ -1,58 +1,86 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import Image from "next/image";
+
+import { subscribeToIrisItems } from "@/lib/gallery-service";
+import { getOptimizedImageUrl } from "@/lib/image-utils";
 
 interface IrisGalleryProps {
   active: boolean;
   onComplete?: () => void;
 }
 
-// 24 high-fashion editorial portraits matching the screenshot
-const IRIS_PHOTOS = [
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1528892952291-009c663ce843?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1534751516642-a171edd2521d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+// 24 high-fashion editorial portraits fallback - compressed for instant loading
+const DEFAULT_IRIS_PHOTOS = [
+  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1548142813-c348350df52b?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1528892952291-009c663ce843?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1519741497674-611481863552?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=60&w=280&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=60&w=280&auto=format&fit=crop",
 ];
 
 export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const animFrameIdRef = useRef<number | null>(null);
-  const baseAngleRef = useRef(0);
-  const [dimensions, setDimensions] = useState({ rx: 440, ry: 190, cardW: 78, cardH: 104 });
+  const centerTextRef = useRef<HTMLDivElement>(null);
+  const [photoUrls, setPhotoUrls] = useState<string[]>(DEFAULT_IRIS_PHOTOS);
 
-  // Responsive oval dimensions
+  // Subscribe to dynamic Iris photos from gallery service
+  useEffect(() => {
+    const unsub = subscribeToIrisItems((items) => {
+      const dynamicUrls = items
+        .filter((i) => i.isIrisItem)
+        .map((i) => getOptimizedImageUrl(i.imageUrl, 280, 60));
+      if (dynamicUrls.length > 0) {
+        // Ensure at least 20 items by repeating if necessary
+        let finalUrls = [...dynamicUrls];
+        while (finalUrls.length < 24) {
+          finalUrls = [...finalUrls, ...dynamicUrls];
+        }
+        setPhotoUrls(finalUrls.slice(0, 24));
+      } else {
+        setPhotoUrls(DEFAULT_IRIS_PHOTOS);
+      }
+    });
+    return () => unsub();
+  }, []);
+  const [dimensions, setDimensions] = useState({
+    rStart: 150,
+    rEnd: 490,
+    cardW: 88,
+    cardH: 120,
+  });
+
+  // Responsive sizing based on viewport
   useEffect(() => {
     const updateDimensions = () => {
       const w = window.innerWidth;
       if (w < 640) {
-        setDimensions({ rx: 165, ry: 85, cardW: 46, cardH: 62 });
+        setDimensions({ rStart: 85, rEnd: 240, cardW: 52, cardH: 72 });
       } else if (w < 1024) {
-        setDimensions({ rx: 310, ry: 140, cardW: 64, cardH: 86 });
+        setDimensions({ rStart: 120, rEnd: 380, cardW: 70, cardH: 96 });
       } else {
-        setDimensions({ rx: 450, ry: 195, cardW: 78, cardH: 104 });
+        setDimensions({ rStart: 150, rEnd: 490, cardW: 88, cardH: 120 });
       }
     };
     updateDimensions();
@@ -60,68 +88,88 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
-  // Kinetic circling & Iris morph animation
+  // Pre-calculated initial positions: All cards start in a tight circular cluster
+  const initialLayout = useMemo(() => {
+    const numCards = photoUrls.length;
+    return photoUrls.map((_, i) => {
+      const theta = (i * 2 * Math.PI) / numCards;
+      const x = Number((Math.cos(theta) * dimensions.rStart).toFixed(2));
+      const y = Number((Math.sin(theta) * dimensions.rStart).toFixed(2));
+      const bladeTilt = Number((Math.sin(theta) * 14).toFixed(2));
+      const zIndex = Math.round((Math.sin(theta) + 1) * 50);
+      return { x, y, bladeTilt, zIndex };
+    });
+  }, [dimensions, photoUrls]);
+
+  // Calm, cinematic expanding iris motion
   useEffect(() => {
     if (!active) return;
 
+    let animFrameId: number;
     const startTime = performance.now();
-    const totalDuration = 3400; // Duration of active animation before initiating exit fade
+    const totalDuration = 4600; // Extended to 4.6s so images are clearly visible
+    const numCards = photoUrls.length;
 
     const animate = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / totalDuration);
 
-      // Smooth constant angular rotation
-      const speed = 0.0075 + progress * 0.004;
-      baseAngleRef.current += speed;
+      // Gentle, calm angular glide (~21 degrees per second)
+      const baseAngle = (elapsed / 1000) * 0.38;
 
-      // Iris morph starts smoothly at 1000ms
-      const morphProgress = Math.max(0, Math.min(1, (elapsed - 1000) / 1400));
-      // Buttery smooth ease-in-out
-      const easedMorph = morphProgress < 0.5 
-        ? 2 * morphProgress * morphProgress 
-        : 1 - Math.pow(-2 * morphProgress + 2, 2) / 2;
+      // Smooth gradual expansion: starts close and blooms wider and wider
+      const easeExpand = 1 - Math.pow(1 - progress, 2.0);
 
-      // Interpolate oval radii into circular iris radius
-      const targetCircleR = dimensions.rx * 0.62;
-      const currentRx = dimensions.rx * (1 - easedMorph) + targetCircleR * easedMorph;
-      const currentRy = dimensions.ry * (1 - easedMorph) + targetCircleR * easedMorph;
+      // Radius expands from close to wide
+      const currentRadiusX = dimensions.rStart + (dimensions.rEnd - dimensions.rStart) * easeExpand;
+      const currentRadiusY = dimensions.rStart + (dimensions.rEnd * 0.74 - dimensions.rStart) * easeExpand;
 
-      const numCards = IRIS_PHOTOS.length;
+      // Card scale starts compact and grows to full size
+      const cardScale = 0.82 + 0.18 * easeExpand;
+
+      // Subtle tilt keeping portraits right-side-up and easily readable
+      const bladeTilt = Math.sin(baseAngle * 1.5) * 8 * (1 - easeExpand * 0.5);
+
+      // Smooth dissolve fade out during the final 700ms
+      const fadeProgress = Math.max(0, (elapsed - (totalDuration - 700)) / 700);
+      const irisOpacity = 1 - fadeProgress;
 
       for (let i = 0; i < numCards; i++) {
         const cardEl = cardsRef.current[i];
         if (!cardEl) continue;
 
-        // Angle around the oval
-        const theta = baseAngleRef.current + (i * 2 * Math.PI) / numCards;
-        const x = Math.cos(theta) * currentRx;
-        const y = Math.sin(theta) * currentRy;
+        const theta = baseAngle + (i * 2 * Math.PI) / numCards;
+        const x = Math.cos(theta) * currentRadiusX;
+        const y = Math.sin(theta) * currentRadiusY;
 
-        // Tangential tilt into iris aperture blades
-        const bladeTilt = easedMorph * ((theta * 180) / Math.PI + 35);
-
-        // Z-Index layering based on Y elevation
+        // Subtle individual tilt keeping portraits upright
+        const individualTilt = Math.sin(theta) * 10 * (1 - easeExpand * 0.6) + bladeTilt;
         const zIndex = Math.round((Math.sin(theta) + 1) * 50);
 
-        cardEl.style.transform = `translate3d(${x}px, ${y}px, 0px) rotate(${bladeTilt}deg)`;
+        cardEl.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), 0px) rotate(${individualTilt.toFixed(2)}deg) scale(${cardScale.toFixed(3)})`;
         cardEl.style.zIndex = String(zIndex);
+        cardEl.style.opacity = irisOpacity.toFixed(3);
+      }
+
+      // Smoothly sync middle of the iris text opacity and subtle scale
+      if (centerTextRef.current) {
+        centerTextRef.current.style.opacity = irisOpacity.toFixed(3);
+        const textScale = 0.94 + 0.06 * easeExpand;
+        centerTextRef.current.style.transform = `scale(${textScale.toFixed(3)})`;
       }
 
       if (elapsed < totalDuration) {
-        animFrameIdRef.current = requestAnimationFrame(animate);
+        animFrameId = requestAnimationFrame(animate);
       } else {
         // Trigger completion callback
         onComplete?.();
       }
     };
 
-    animFrameIdRef.current = requestAnimationFrame(animate);
+    animFrameId = requestAnimationFrame(animate);
 
     return () => {
-      if (animFrameIdRef.current) {
-        cancelAnimationFrame(animFrameIdRef.current);
-      }
+      cancelAnimationFrame(animFrameId);
     };
   }, [active, dimensions, onComplete]);
 
@@ -130,61 +178,69 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden bg-[#070707] select-none pointer-events-none"
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden bg-[#000000] select-none pointer-events-none"
     >
-      {/* Subtle background ambient glow */}
-      <div className="absolute w-[600px] h-[340px] rounded-full bg-white/[0.02] blur-[100px] pointer-events-none" />
+      {/* Subtle ambient light bloom in center */}
+      <div className="absolute w-[600px] h-[360px] rounded-full bg-white/[0.04] blur-[140px] pointer-events-none" />
 
-      {/* Title & Subtitle Requested by User */}
-      <div className="absolute top-12 sm:top-20 z-40 text-center flex flex-col items-center gap-2">
-        <h2 className="font-serif-elegant text-3xl sm:text-4xl md:text-5xl font-light text-white tracking-[0.06em] uppercase">
-          Iris Gallery
-        </h2>
-        <p className="font-mono-brutal text-[11px] sm:text-xs text-neutral-400 tracking-widest uppercase">
-          An oval of photos that turns into an iris
-        </p>
+      {/* Dead Center Aperture: Artistic Welcome Text in Middle of the Iris */}
+      <div
+        ref={centerTextRef}
+        className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20 text-center px-4 will-change-[opacity,transform]"
+      >
+        <div className="max-w-[320px] sm:max-w-md md:max-w-xl flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-1000 ease-out">
+          <span className="text-[10px] sm:text-[11px] font-syne uppercase tracking-[0.35em] text-neutral-200 mb-2 sm:mb-2.5 font-semibold">
+            Capturing Emotions & Stories
+          </span>
+          <h1 className="font-artistic text-2xl sm:text-4xl md:text-5xl lg:text-6xl text-white font-bold italic tracking-[0.02em] leading-[1.16] drop-shadow-[0_10px_35px_rgba(0,0,0,0.95)]">
+            Welcome to the domain of Aziz
+          </h1>
+          <div className="w-12 sm:w-16 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent mt-3 sm:mt-4" />
+        </div>
       </div>
 
       {/* Orbiting Center Stage */}
-      <div className="relative w-0 h-0 flex items-center justify-center">
-        {IRIS_PHOTOS.map((url, i) => (
-          <div
-            key={i}
-            ref={(el) => {
-              cardsRef.current[i] = el;
-            }}
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 will-change-transform"
-          >
-            {/* Rounded Portrait Card matching the screenshot */}
+      <div className="relative w-0 h-0 flex items-center justify-center z-30">
+        {photoUrls.map((url, i) => {
+          const init = initialLayout[i] || { x: 0, y: 0, bladeTilt: 0, zIndex: 1 };
+          return (
             <div
-              className="relative overflow-hidden bg-neutral-900 border border-white/20 shadow-2xl transition-all duration-300"
+              key={i}
+              ref={(el) => {
+                cardsRef.current[i] = el;
+              }}
+              suppressHydrationWarning
+              className="absolute left-1/2 top-1/2 will-change-transform"
               style={{
-                width: `${dimensions.cardW}px`,
-                height: `${dimensions.cardH}px`,
-                borderRadius: "18px",
-                boxShadow: "0 16px 32px rgba(0,0,0,0.85), 0 4px 10px rgba(0,0,0,0.5)",
+                transform: `translate3d(calc(-50% + ${init.x}px), calc(-50% + ${init.y}px), 0px) rotate(${init.bladeTilt}deg) scale(0.82)`,
+                zIndex: init.zIndex,
               }}
             >
-              <Image
-                src={url}
-                alt="Iris Portrait"
-                fill
-                sizes="120px"
-                className="object-cover"
-                priority
-              />
+              {/* Rounded Portrait Card - Sized for clarity and detail */}
+              <div
+                className="relative overflow-hidden bg-neutral-900 border border-white/20 shadow-2xl transition-all duration-300"
+                style={{
+                  width: `${dimensions.cardW}px`,
+                  height: `${dimensions.cardH}px`,
+                  borderRadius: "16px",
+                  boxShadow: "0 20px 40px rgba(0,0,0,0.95), 0 4px 12px rgba(0,0,0,0.6)",
+                }}
+              >
+                <Image
+                  src={url}
+                  alt="Iris Portrait"
+                  fill
+                  sizes="180px"
+                  className="object-cover pointer-events-none"
+                  priority={i < 12}
+                />
 
-              {/* Glass sheen highlight */}
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/10" />
+                {/* Subtle glass gloss overlay */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/10" />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom Minimal Indicator */}
-      <div className="absolute bottom-10 sm:bottom-14 z-40 flex items-center gap-2 font-mono-brutal text-[10px] uppercase tracking-[0.25em] text-neutral-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping" />
-        <span>CIRCLING ORBIT // APERTURE DIAPHRAGM</span>
+          );
+        })}
       </div>
     </div>
   );

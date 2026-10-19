@@ -15,6 +15,7 @@ import { GalleryItem } from "@/types/gallery";
 import DndBoard from "@/components/admin/DndBoard";
 import ImageUploader from "@/components/admin/ImageUploader";
 import EditItemModal from "@/components/admin/EditItemModal";
+import IrisManagerModal from "@/components/admin/IrisManagerModal";
 import {
   Plus,
   ExternalLink,
@@ -33,6 +34,7 @@ function AdminDashboardContent() {
 
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [showUploader, setShowUploader] = useState(false);
+  const [showIrisManager, setShowIrisManager] = useState(false);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -65,6 +67,11 @@ function AdminDashboardContent() {
   const handleToggleFeatured = async (id: string, isFeatured: boolean) => {
     await updateGalleryItem(id, { isFeatured });
     showNotice(isFeatured ? "Asset highlighted as featured" : "Featured badge removed");
+  };
+
+  const handleToggleIris = async (id: string, isIrisItem: boolean) => {
+    await updateGalleryItem(id, { isIrisItem });
+    showNotice(isIrisItem ? "Photo added to Iris intro animation" : "Photo removed from Iris intro animation");
   };
 
   const handleDeleteItem = async (id: string) => {
@@ -144,11 +151,10 @@ function AdminDashboardContent() {
 
           <Link
             href="/"
-            target="_blank"
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:border-white text-white text-[10px] uppercase font-bold tracking-wider"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/90 hover:bg-red-500 text-white text-[10px] uppercase font-bold tracking-wider transition-colors"
           >
-            <span>Preview Site</span>
-            <ExternalLink className="w-3 h-3" />
+            <Sparkles className="w-3 h-3" />
+            <span>Visual In-Situ Editor</span>
           </Link>
 
           <button
@@ -180,16 +186,25 @@ function AdminDashboardContent() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowUploader(!showUploader)}
-              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-colors"
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>{showUploader ? "Close Uploader" : "Upload New Image"}</span>
             </button>
 
             <button
+              type="button"
+              onClick={() => setShowIrisManager(true)}
+              className="px-3.5 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-white/10 font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-red-500" />
+              <span>Iris Animation ({items.filter((i) => i.isIrisItem).length})</span>
+            </button>
+
+            <button
               onClick={handleResetDefaults}
               title="Reset gallery to default exhibition images"
-              className="px-3 py-2.5 border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+              className="px-3 py-2.5 border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
               <span className="hidden sm:inline">Reset Defaults</span>
@@ -216,10 +231,23 @@ function AdminDashboardContent() {
           onReorder={handleReorder}
           onToggleVisibility={handleToggleVisibility}
           onToggleFeatured={handleToggleFeatured}
+          onToggleIris={handleToggleIris}
           onDeleteItem={handleDeleteItem}
           onEditItem={(item) => setEditingItem(item)}
         />
       </main>
+
+      {/* Iris Manager Modal */}
+      {showIrisManager && (
+        <IrisManagerModal
+          items={items}
+          onClose={() => setShowIrisManager(false)}
+          onPreviewIris={() => {
+            setShowIrisManager(false);
+            router.push("/");
+          }}
+        />
+      )}
 
       {/* Edit Item Modal */}
       <EditItemModal

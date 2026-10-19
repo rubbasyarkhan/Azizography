@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import {
   DndContext,
@@ -36,6 +36,7 @@ import {
   MapPin,
   Calendar,
   Sparkles,
+  Search,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -44,6 +45,7 @@ interface DndBoardProps {
   onReorder: (newItems: GalleryItem[]) => void;
   onToggleVisibility: (id: string, isVisible: boolean) => void;
   onToggleFeatured: (id: string, isFeatured: boolean) => void;
+  onToggleIris?: (id: string, isIrisItem: boolean) => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (item: GalleryItem) => void;
 }
@@ -53,12 +55,14 @@ function SortableCard({
   item,
   onToggleVisibility,
   onToggleFeatured,
+  onToggleIris,
   onDeleteItem,
   onEditItem,
 }: {
   item: GalleryItem;
   onToggleVisibility: (id: string, isVisible: boolean) => void;
   onToggleFeatured: (id: string, isFeatured: boolean) => void;
+  onToggleIris?: (id: string, isIrisItem: boolean) => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (item: GalleryItem) => void;
 }) {
@@ -78,6 +82,8 @@ function SortableCard({
 
   const getCategoryColor = (cat: GalleryCategory) => {
     switch (cat) {
+      case "people":
+        return "text-emerald-400 border-emerald-500/30 bg-emerald-950/20";
       case "concerts":
         return "text-red-400 border-red-500/30 bg-red-950/20";
       case "singers":
@@ -175,12 +181,31 @@ function SortableCard({
           <button
             onClick={() => onToggleFeatured(item.id, !item.isFeatured)}
             title={item.isFeatured ? "Featured (Click to Unfeature)" : "Mark as Featured"}
-            className={`p-1.5 transition-colors ${
+            className={`p-1.5 transition-colors cursor-pointer ${
               item.isFeatured ? "text-amber-400 fill-amber-400" : "text-neutral-500 hover:text-amber-300"
             }`}
           >
             <Star className={`w-3.5 h-3.5 ${item.isFeatured ? "fill-amber-400" : ""}`} />
           </button>
+
+          {/* Toggle Iris Active */}
+          {onToggleIris && (
+            <button
+              onClick={() => onToggleIris(item.id, !item.isIrisItem)}
+              title={
+                item.isIrisItem
+                  ? "Active in Iris Animation (Click to Remove)"
+                  : "Add to Iris Animation"
+              }
+              className={`p-1.5 transition-colors cursor-pointer ${
+                item.isIrisItem
+                  ? "text-red-400 bg-red-950/40 hover:text-white"
+                  : "text-neutral-500 hover:text-white"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -188,7 +213,7 @@ function SortableCard({
           <button
             onClick={() => onEditItem(item)}
             title="Edit Details"
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors"
+            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
           >
             <Edit2 className="w-3.5 h-3.5" />
           </button>
@@ -197,7 +222,7 @@ function SortableCard({
           <button
             onClick={() => onDeleteItem(item.id)}
             title="Delete from Gallery"
-            className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors"
+            className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -212,11 +237,38 @@ export default function DndBoard({
   onReorder,
   onToggleVisibility,
   onToggleFeatured,
+  onToggleIris,
   onDeleteItem,
   onEditItem,
 }: DndBoardProps) {
   const [viewMode, setViewMode] = useState<"grid" | "kanban">("grid");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+
+  const categories: GalleryCategory[] = ["people", "concerts", "singers", "weddings", "events"];
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (filterCategory === "iris") {
+        if (!item.isIrisItem) return false;
+      } else if (filterCategory !== "all") {
+        if (item.category !== filterCategory) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = item.title?.toLowerCase().includes(q);
+        const matchSeries = item.seriesOrProject?.toLowerCase().includes(q);
+        const matchArtist = item.artist?.toLowerCase().includes(q);
+        const matchLocation = item.location?.toLowerCase().includes(q);
+        const matchTags = item.tags?.some((t) => t.toLowerCase().includes(q));
+        return Boolean(matchTitle || matchSeries || matchArtist || matchLocation || matchTags);
+      }
+
+      return true;
+    });
+  }, [items, filterCategory, searchQuery]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -258,44 +310,88 @@ export default function DndBoard({
 
   const activeItem = activeDragId ? items.find((i) => i.id === activeDragId) : null;
 
-  const categories: GalleryCategory[] = ["concerts", "singers", "weddings", "events"];
-
   return (
     <div className="space-y-6">
-      {/* Board Controls & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-[#111111] border border-white/10 font-mono-brutal text-xs">
-        <div className="flex items-center gap-3">
-          <span className="text-white font-bold uppercase tracking-wider">
-            CANVAS CONTROLLER:
-          </span>
-          <span className="text-neutral-400">
-            {items.length} Images Indexed
-          </span>
+      {/* Search & Category Filter Toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-[#111111] border border-white/10 font-mono-brutal text-xs">
+        {/* Search input */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by title, series, artist, or tag..."
+            className="w-full bg-[#181818] border border-white/10 pl-9 pr-3 py-2 text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/40 text-xs"
+          />
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <button
+            type="button"
+            onClick={() => setFilterCategory("all")}
+            className={`px-2.5 py-1 uppercase tracking-wider transition-colors cursor-pointer border ${
+              filterCategory === "all"
+                ? "bg-white text-black border-white font-bold"
+                : "bg-transparent text-neutral-400 border-white/10 hover:border-white/30"
+            }`}
+          >
+            All ({items.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory("iris")}
+            className={`px-2.5 py-1 uppercase tracking-wider transition-colors cursor-pointer border flex items-center gap-1 ${
+              filterCategory === "iris"
+                ? "bg-red-600 text-white border-red-500 font-bold"
+                : "bg-transparent text-neutral-400 border-white/10 hover:border-white/30"
+            }`}
+          >
+            <Sparkles className="w-3 h-3 text-red-400" />
+            <span>Iris ({items.filter((i) => i.isIrisItem).length})</span>
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setFilterCategory(cat)}
+              className={`px-2.5 py-1 uppercase tracking-wider transition-colors cursor-pointer border ${
+                filterCategory === cat
+                  ? "bg-white text-black border-white font-bold"
+                  : "bg-transparent text-neutral-400 border-white/10 hover:border-white/30"
+              }`}
+            >
+              {cat} ({items.filter((i) => i.category === cat).length})
+            </button>
+          ))}
+        </div>
+
+        {/* View mode toggle */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
             onClick={() => setViewMode("grid")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs uppercase tracking-wider transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs uppercase tracking-wider transition-colors cursor-pointer ${
               viewMode === "grid"
                 ? "bg-white text-black border-white font-bold"
                 : "bg-transparent text-neutral-400 border-white/10 hover:border-white/30"
             }`}
           >
             <Grid className="w-3.5 h-3.5" />
-            <span>Layout Grid</span>
+            <span>Grid</span>
           </button>
-
           <button
+            type="button"
             onClick={() => setViewMode("kanban")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs uppercase tracking-wider transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs uppercase tracking-wider transition-colors cursor-pointer ${
               viewMode === "kanban"
                 ? "bg-white text-black border-white font-bold"
                 : "bg-transparent text-neutral-400 border-white/10 hover:border-white/30"
             }`}
           >
             <Columns className="w-3.5 h-3.5" />
-            <span>Jira / Kanban</span>
+            <span>Kanban</span>
           </button>
         </div>
       </div>
@@ -309,25 +405,31 @@ export default function DndBoard({
       >
         {viewMode === "grid" ? (
           /* Grid Sortable Layout */
-          <SortableContext items={items.map((i) => i.id)} strategy={rectSortingStrategy}>
+          <SortableContext items={filteredItems.map((i) => i.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <SortableCard
                   key={item.id}
                   item={item}
                   onToggleVisibility={onToggleVisibility}
                   onToggleFeatured={onToggleFeatured}
+                  onToggleIris={onToggleIris}
                   onDeleteItem={onDeleteItem}
                   onEditItem={onEditItem}
                 />
               ))}
+              {filteredItems.length === 0 && (
+                <div className="col-span-full py-16 text-center border border-dashed border-white/10 text-neutral-500 font-mono text-xs uppercase">
+                  No images matching filter or search query.
+                </div>
+              )}
             </div>
           </SortableContext>
         ) : (
           /* Jira / ClickUp Style Kanban Columns */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {categories.map((cat) => {
-              const catItems = items.filter((i) => i.category === cat);
+              const catItems = filteredItems.filter((i) => i.category === cat);
               return (
                 <div
                   key={cat}
@@ -353,6 +455,7 @@ export default function DndBoard({
                           item={item}
                           onToggleVisibility={onToggleVisibility}
                           onToggleFeatured={onToggleFeatured}
+                          onToggleIris={onToggleIris}
                           onDeleteItem={onDeleteItem}
                           onEditItem={onEditItem}
                         />

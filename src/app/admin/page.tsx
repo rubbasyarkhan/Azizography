@@ -22,9 +22,23 @@ function AdminLoginContent() {
   }, [user, router]);
 
   const handleFillDefaults = () => {
-    setEmail("admin@azizograhy.com");
+    setEmail("admin@azizography.com");
     setPassword("azizography123");
     setError(null);
+  };
+
+  const handleInstantDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+    setEmail("admin@azizography.com");
+    setPassword("azizography123");
+    const result = await login("admin@azizography.com", "azizography123");
+    if (result.success) {
+      router.push("/admin/dashboard");
+    } else {
+      setError(result.error || "Authentication failed.");
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -90,7 +104,7 @@ function AdminLoginContent() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@azizograhy.com"
+              placeholder="admin@azizography.com"
               className="w-full bg-[#181818] border border-white/10 px-3 py-2.5 text-white placeholder:text-neutral-600 focus:outline-none focus:border-white text-xs"
             />
           </div>
@@ -112,7 +126,7 @@ function AdminLoginContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-display font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-4 disabled:opacity-50"
+            className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-display font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all mt-4 disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
               <>
@@ -128,22 +142,21 @@ function AdminLoginContent() {
           </button>
         </form>
 
-        {/* Demo Credentials Quick Fill */}
+        {/* Demo Credentials Quick Fill & 1-Click Login */}
         <div className="mt-6 pt-6 border-t border-white/10 space-y-3">
-          <div className="flex items-center justify-between text-[10px] text-neutral-400 uppercase">
-            <span>DEFAULT SEED CREDENTIALS:</span>
-            <button
-              onClick={handleFillDefaults}
-              className="text-red-400 hover:text-red-300 font-bold underline flex items-center gap-1"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>Click to auto-fill</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleInstantDemoLogin}
+            disabled={loading}
+            className="w-full py-2.5 bg-white/10 hover:bg-white text-white hover:text-black font-mono text-[11px] uppercase tracking-wider font-bold transition-all border border-white/20 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>1-Click Instant Demo Login</span>
+          </button>
 
           <div className="p-3 bg-black/60 border border-white/10 font-mono text-[10px] text-neutral-300 space-y-1">
             <div>
-              <span className="text-neutral-500">EMAIL:</span> admin@azizograhy.com
+              <span className="text-neutral-500">EMAIL:</span> admin@azizography.com
             </div>
             <div>
               <span className="text-neutral-500">PASS:</span> azizography123

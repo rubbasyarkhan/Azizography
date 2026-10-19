@@ -21,6 +21,7 @@ export default function EditItemModal({
   if (!item) return null;
 
   const [title, setTitle] = useState(item.title);
+  const [seriesOrProject, setSeriesOrProject] = useState(item.seriesOrProject || "");
   const [category, setCategory] = useState<GalleryCategory>(item.category);
   const [artist, setArtist] = useState(item.artist || "");
   const [location, setLocation] = useState(item.location || "");
@@ -30,6 +31,7 @@ export default function EditItemModal({
   );
   const [isFeatured, setIsFeatured] = useState(item.isFeatured);
   const [isVisible, setIsVisible] = useState(item.isVisible);
+  const [isIrisItem, setIsIrisItem] = useState(Boolean(item.isIrisItem));
   const [tagsString, setTagsString] = useState(item.tags?.join(", ") || "");
 
   // EXIF
@@ -48,6 +50,7 @@ export default function EditItemModal({
 
     onSave(item.id, {
       title,
+      seriesOrProject: seriesOrProject.trim() || undefined,
       category,
       artist: artist.trim() || undefined,
       location: location.trim() || undefined,
@@ -55,6 +58,7 @@ export default function EditItemModal({
       aspectRatio,
       isFeatured,
       isVisible,
+      isIrisItem,
       tags: tags.length > 0 ? tags : undefined,
       exif: {
         camera,
@@ -115,6 +119,19 @@ export default function EditItemModal({
             />
           </div>
 
+          <div>
+            <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
+              Series / Project / Story Name (Appears in Sidebar)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Netflix x The Four Seasons, Taika Waititi for WIRED..."
+              value={seriesOrProject}
+              onChange={(e) => setSeriesOrProject(e.target.value)}
+              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs focus:outline-none focus:border-white"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
@@ -125,6 +142,7 @@ export default function EditItemModal({
                 onChange={(e) => setCategory(e.target.value as GalleryCategory)}
                 className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
               >
+                <option value="people">People / Editorial</option>
                 <option value="concerts">Concerts</option>
                 <option value="singers">Singers</option>
                 <option value="weddings">Weddings</option>
@@ -223,6 +241,18 @@ export default function EditItemModal({
               />
               <span className="text-[10px] uppercase font-bold text-neutral-300">
                 Featured Card
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isIrisItem}
+                onChange={(e) => setIsIrisItem(e.target.checked)}
+                className="accent-red-600"
+              />
+              <span className="text-[10px] uppercase font-bold text-red-400">
+                ★ Include in Iris Animation
               </span>
             </label>
           </div>

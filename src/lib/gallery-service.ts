@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-const LOCAL_STORAGE_KEY = "azizography_gallery_items_v1";
+const LOCAL_STORAGE_KEY = "azizography_gallery_items_v4";
 
 // Helper to get local items
 export function getLocalItems(): GalleryItem[] {
@@ -124,6 +124,21 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
     window.removeEventListener("azizography_gallery_update", handler);
     window.removeEventListener("storage", handler);
   };
+}
+
+// Helper to get only Iris items (for the Iris loading animation)
+export function getIrisItems(): GalleryItem[] {
+  const items = getLocalItems();
+  const iris = items.filter((i) => i.isIrisItem);
+  return iris.length > 0 ? iris : items;
+}
+
+// Subscribe to Iris items
+export function subscribeToIrisItems(callback: (items: GalleryItem[]) => void): () => void {
+  return subscribeToGalleryItems((items) => {
+    const iris = items.filter((i) => i.isIrisItem);
+    callback(iris.length > 0 ? iris : items);
+  });
 }
 
 // Update multiple items order and/or category (Jira/Clickup style Drag and drop)

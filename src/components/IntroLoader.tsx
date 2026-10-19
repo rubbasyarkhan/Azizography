@@ -11,65 +11,55 @@ interface IntroLoaderProps {
 }
 
 export default function IntroLoader({ onComplete, forceShow = false }: IntroLoaderProps) {
-  const [hasVisited, setHasVisited] = useState<boolean | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const timelineRef = useRef<gsap.core.Timeline | null>(null);
 
-  // Check sessionStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const visited = sessionStorage.getItem("azizography_iris_seen");
-      if (visited && !forceShow) {
-        setHasVisited(true);
-        onComplete();
-      } else {
-        setHasVisited(false);
+    setMounted(true);
+  }, []);
+
+  // When forceShow is triggered, re-enable the loader
+  useEffect(() => {
+    if (forceShow) {
+      setIsVisible(true);
+      if (containerRef.current) {
+        gsap.set(containerRef.current, { opacity: 1, scale: 1, filter: "blur(0px)" });
+        containerRef.current.style.pointerEvents = "auto";
       }
     }
-  }, [forceShow, onComplete]);
+  }, [forceShow]);
 
-  // Smooth entrance fade-in
-  useEffect(() => {
-    if (hasVisited !== false) return;
-
-    if (containerRef.current) {
-      gsap.fromTo(
-        containerRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.8, ease: "power2.out" }
-      );
-    }
-  }, [hasVisited]);
-
-  // Ultra-smooth exit fade transition into the live home page
+  // Handle smooth transition from Iris Animation into the Home Page
   const handleIrisComplete = () => {
     if (!containerRef.current) {
       finish();
       return;
     }
 
+    containerRef.current.style.pointerEvents = "none";
+
     gsap.to(containerRef.current, {
       opacity: 0,
-      scale: 1.04,
-      filter: "blur(12px)",
-      duration: 1.2,
+      scale: 1.03,
+      filter: "blur(10px)",
+      duration: 1.0,
       ease: "power2.inOut",
       onComplete: finish,
     });
   };
 
   const finish = () => {
-    sessionStorage.setItem("azizography_iris_seen", "true");
-    setHasVisited(true);
+    setIsVisible(false);
     onComplete();
   };
 
   const handleSkip = () => {
-    timelineRef.current?.kill();
     if (containerRef.current) {
+      containerRef.current.style.pointerEvents = "none";
       gsap.to(containerRef.current, {
         opacity: 0,
-        duration: 0.4,
+        duration: 0.35,
         ease: "power2.out",
         onComplete: finish,
       });
@@ -78,7 +68,7 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
     }
   };
 
-  // Keyboard shortcut ESC to skip
+  // Keyboard shortcut ESC to skip loading animation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.code === "Space") {
@@ -89,34 +79,34 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  if (hasVisited === null || hasVisited === true) {
+  if (!isVisible) {
     return null;
   }
 
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 bg-[#070707] text-white flex flex-col justify-between overflow-hidden select-none will-change-[opacity,transform,filter]"
+      className="fixed inset-0 z-50 bg-[#000000] text-white flex flex-col justify-between overflow-hidden select-none will-change-[opacity,transform,filter]"
     >
-      {/* Top Bar with Minimal Indicator and Skip Control */}
-      <div className="relative z-40 flex items-center justify-between p-6 sm:p-10 text-[10px] uppercase font-mono-brutal tracking-[0.25em] text-neutral-400">
-        <div className="flex items-center gap-3">
-          <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-          <span>AZIZOGRAPHY // IRIS GALLERY</span>
-        </div>
-
+      {/* Top Minimal Navigation Bar */}
+      <div className="relative z-40 w-screen flex items-center justify-end p-6 sm:p-10 text-[10px] uppercase font-mono-brutal tracking-[0.25em] text-neutral-400">
         <button
           type="button"
           onClick={handleSkip}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:border-white text-white hover:bg-white hover:text-black transition-all text-[9px] font-semibold tracking-widest uppercase"
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:border-white text-white hover:bg-white hover:text-black transition-all text-[9px] font-semibold tracking-widest uppercase cursor-pointer"
         >
           <span>ENTER SITE [ESC]</span>
           <ArrowRight className="w-3 h-3" />
         </button>
       </div>
 
-      {/* Iris Gallery: Oval of photos circling around and morphing into an iris */}
-      <IrisGallery active={true} onComplete={handleIrisComplete} />
+      {/* Iris Gallery: Mounts only on client to eliminate SSR hydration mismatch */}
+      {mounted && <IrisGallery active={true} onComplete={handleIrisComplete} />}
+
+      {/* Clean bottom spacer for perfect vertical balance */}
+      <div className="relative z-40 p-6 sm:p-10 pointer-events-none opacity-0 select-none" aria-hidden="true">
+        <span className="text-[10px]">SPACER</span>
+      </div>
     </div>
   );
 }

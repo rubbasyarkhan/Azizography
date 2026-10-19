@@ -1,34 +1,55 @@
 @import "tailwindcss";
 
 :root {
-  --background: #070707;
-  --foreground: #f5f5f7;
-  --card-bg: #101010;
-  --border-muted: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.22);
+  --background: #FAF9F6;
+  --foreground: #0A0A0A;
+  --card-bg: #FFFFFF;
+  --border-muted: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.22);
 }
 
-/* Custom Font Utilities */
+@theme {
+  --font-serif: var(--font-cormorant), var(--font-playfair), Georgia, serif;
+  --font-sans: var(--font-syne), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-space-grotesk), monospace;
+}
+
+/* Custom Artistic Font Utilities */
+.font-italiana {
+  font-family: var(--font-italiana), var(--font-cormorant), Georgia, serif;
+}
+
+.font-artistic {
+  font-family: var(--font-italiana), var(--font-cormorant), Georgia, serif;
+}
+
+.font-serif,
+.font-serif-elegant {
+  font-family: var(--font-cormorant), var(--font-playfair), Georgia, serif;
+}
+
+.font-syne,
 .font-display {
   font-family: var(--font-syne), -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.font-mono-brutal {
-  font-family: var(--font-space-grotesk), monospace;
-}
-
-.font-serif-elegant {
-  font-family: var(--font-cormorant), Georgia, serif;
 }
 
 .font-cinzel {
   font-family: var(--font-cinzel), serif;
 }
 
-/* Smooth Scrolling & Body setup */
+.font-playfair {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+.font-mono-brutal {
+  font-family: var(--font-space-grotesk), monospace;
+}
+
+/* Smooth Scrolling & Body setup - Pearl White Light Theme */
 html {
   scroll-behavior: smooth;
-  background-color: #070707;
+  background-color: #FAF9F6;
+  color: #0A0A0A;
 }
 
 html.lenis, html.lenis body {
@@ -51,22 +72,23 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
-/* Brutalist Custom Scrollbar */
+/* Refined Pearl White Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #070707;
+  background: #FAF9F6;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: #D8D6CE;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #f5f5f7;
+  background: #0A0A0A;
 }
 
 /* Kinetic Marquee */
@@ -89,16 +111,16 @@ html.lenis, html.lenis body {
   animation-play-state: paused;
 }
 
-/* Glow & Accent Effects */
+/* Glass & Border Utilities */
 .glass-panel {
-  background: rgba(18, 18, 18, 0.7);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .brutalist-border {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 .brutalist-card {
@@ -107,10 +129,5 @@ html.lenis, html.lenis body {
 
 .brutalist-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-/* Image reveal clip path utilities */
-.clip-curtain {
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
+  border-color: rgba(0, 0, 0, 0.4);
 }
