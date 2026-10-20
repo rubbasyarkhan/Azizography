@@ -68,8 +68,8 @@ cp .env.example .env.local
 
 | Variable | Description |
 | :--- | :--- |
-| `NEXT_PUBLIC_ADMIN_EMAIL` | Administrator login email address for the curator studio |
-| `NEXT_PUBLIC_ADMIN_PASSWORD` | Administrator login password |
+| `ADMIN_EMAIL` | Administrator login email address for the curator studio (server-side) |
+| `ADMIN_PASSWORD` | Administrator login password (server-side) |
 | `CONTACT_EMAIL` | Destination email address where contact inquiries are delivered |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | Public contact inquiry address displayed on the contact page |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | *(Optional)* Firebase Web API Key |

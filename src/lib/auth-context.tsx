@@ -27,18 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   isFirebaseActive: false,
 });
 
-const CONFIGURED_ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
-const CONFIGURED_ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "";
 const AUTH_STORAGE_KEY = "azizography_auth_session";
-
-const isValidAdmin = (email?: string | null) => {
-  if (!email) return false;
-  const normalized = email.toLowerCase().trim();
-  if (CONFIGURED_ADMIN_EMAIL) {
-    return normalized === CONFIGURED_ADMIN_EMAIL;
-  }
-  return true;
-};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<{ email: string; uid: string } | null>(null);
@@ -76,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = useCallback(async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
-    // 1. If live Firebase auth is configured
+    // 1. If live Firebase auth is configured, attempt Firebase login first
     if (isFirebaseConfigured && auth) {
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
@@ -87,41 +76,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u);
         sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(u));
         return { success: true };
-      } catch (err: unknown) {
-        const error = err as Error;
-        // Check environment variable credentials
-        if (
-          CONFIGURED_ADMIN_EMAIL &&
-          CONFIGURED_ADMIN_PASS &&
-          email.toLowerCase().trim() === CONFIGURED_ADMIN_EMAIL &&
-          pass === CONFIGURED_ADMIN_PASS
-        ) {
-          const adminUser = { email: email.trim(), uid: "admin-session-active" };
-          setUser(adminUser);
-          sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(adminUser));
-          return { success: true };
-        }
-        return { success: false, error: error.message || "Invalid email or password." };
+      } catch {
+        // Fall back to server-side authentication below
       }
     }
 
-    // 2. Local / Environment-Configured Admin Auth
-    if (
-      CONFIGURED_ADMIN_EMAIL &&
-      CONFIGURED_ADMIN_PASS &&
-      email.toLowerCase().trim() === CONFIGURED_ADMIN_EMAIL &&
-      pass === CONFIGURED_ADMIN_PASS
-    ) {
-      const adminUser = { email: email.trim(), uid: "admin-session-active" };
-      setUser(adminUser);
-      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(adminUser));
-      return { success: true };
-    }
+    // 2. Server-side admin authentication via secure API endpoint
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: pass }),
+      });
+      const data = await response.json();
 
-    return {
-      success: false,
-      error: "Invalid email or password. Please verify your administrator credentials.",
-    };
+      if (response.ok && data.success && data.user) {
+        setUser(data.user);
+        sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        error: data.error || "Invalid email or password. Please verify your administrator credentials.",
+      };
+    } catch (err) {
+      console.error("Login verification error", err);
+      return {
+        success: false,
+        error: "Unable to verify credentials. Please check your network connection.",
+      };
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -136,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const isAdmin = Boolean(user && (user.uid === "admin-session-active" || isValidAdmin(user.email)));
+  const isAdmin = Boolean(user && (user.uid === "admin-session-active" || user.email));
 
   const contextValue = useMemo(
     () => ({
