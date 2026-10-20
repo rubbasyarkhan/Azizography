@@ -1,5 +1,5 @@
 import HomePage from "../page";
 
 export default function LivePage() {
-  return <HomePage />;
+  return <HomePage initialFilter="concerts" />;
 }

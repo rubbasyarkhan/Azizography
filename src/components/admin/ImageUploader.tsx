@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import Image from "next/image";
-import { GalleryItem, GalleryCategory } from "@/types/gallery";
+import { GalleryCategory } from "@/types/gallery";
 import { uploadImageFile, createGalleryItem } from "@/lib/gallery-service";
 import {
   convertAndCompressToWebP,
@@ -11,13 +11,15 @@ import {
 } from "@/lib/image-utils";
 import {
   Upload,
-  Image as ImageIcon,
   X,
   CheckCircle2,
-  Camera,
   Loader2,
   Sparkles,
+  Sliders,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
+import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface ImageUploaderProps {
   onSuccess: () => void;
@@ -33,10 +35,12 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [useExternalUrl, setUseExternalUrl] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExifFields, setShowExifFields] = useState(false);
 
   // Form Fields
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<GalleryCategory>("concerts");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<GalleryCategory>("people");
   const [artist, setArtist] = useState("");
   const [location, setLocation] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
@@ -44,7 +48,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [seriesOrProject, setSeriesOrProject] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
   const [isIrisItem, setIsIrisItem] = useState(false);
+  const [isFooterTrailItem, setIsFooterTrailItem] = useState(false);
   const [tagsString, setTagsString] = useState("");
+  const [instagramUrl, setInstagramUrl] = useState("");
 
   // EXIF
   const [camera, setCamera] = useState("Sony A1");
@@ -64,7 +70,6 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
     setConverting(true);
 
     try {
-      // Convert any uploaded image format to optimized WebP and compress
       const result = await convertAndCompressToWebP(file, {
         maxWidth: 1920,
         maxHeight: 1920,
@@ -88,7 +93,6 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
       }
     } catch (err: unknown) {
       console.warn("Client WebP conversion fallback:", err);
-      // Fallback
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setConversionStats(null);
@@ -111,7 +115,7 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setError("Please enter a title for the image.");
+      setError("Please enter a title for the photograph.");
       return;
     }
 
@@ -147,6 +151,7 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
       await createGalleryItem({
         title: title.trim(),
+        description: description.trim() || undefined,
         seriesOrProject: seriesOrProject.trim() || undefined,
         category,
         imageUrl: finalImageUrl,
@@ -157,10 +162,12 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         isFeatured,
         isVisible: true,
         isIrisItem,
+        isFooterTrailItem,
         artist: artist.trim() || undefined,
         location: location.trim() || undefined,
         year: year.trim() || undefined,
         aspectRatio,
+        instagramUrl: instagramUrl.trim() || undefined,
         exif: {
           camera,
           lens,
@@ -181,44 +188,47 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   };
 
   return (
-    <div className="bg-[#111111] border border-white/20 p-6 sm:p-8 font-mono-brutal text-xs max-w-4xl mx-auto">
+    <div className="bg-[#FAF7F2] border border-[#DDD6CA] p-6 sm:p-8 text-[#1C1917] rounded-2xl shadow-xs font-admin">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
+      <div className="flex items-center justify-between pb-4 border-b border-[#DDD6CA] mb-6">
         <div>
-          <span className="text-[10px] text-red-500 font-bold uppercase tracking-widest block mb-1">
-            // NEW ASSET INGESTION
-          </span>
-          <h3 className="font-display text-2xl font-bold uppercase text-white">
-            UPLOAD & INDEX IMAGE
+          <h3 className="text-xl sm:text-2xl font-bold text-[#1C1917] tracking-tight">
+            Add Photograph
           </h3>
+          <p className="text-sm text-stone-600 mt-1">
+            Auto-compresses to WebP 82% before publishing to the archive
+          </p>
         </div>
 
         <button
           onClick={onCancel}
-          className="p-2 border border-white/10 hover:border-white text-neutral-400 hover:text-white"
+          type="button"
+          aria-label="Close"
+          className="p-2 text-stone-500 hover:text-[#1C1917] hover:bg-[#EAE4D9] rounded-lg transition-colors cursor-pointer"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
       </div>
 
       {error && (
-        <div className="mb-6 p-3 bg-red-950/40 border border-red-500 text-red-400 text-xs">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-lg">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Dropzone & Preview Row */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Media Drop & WebP Stats */}
+          <div className="lg:col-span-5 space-y-4">
             {converting ? (
-              <div className="w-full h-64 border-2 border-dashed border-red-500/50 bg-[#151515] flex flex-col items-center justify-center p-6 text-center">
-                <Loader2 className="w-8 h-8 text-red-500 animate-spin mb-3" />
-                <span className="font-bold text-white uppercase tracking-wider block mb-1">
-                  CONVERTING TO WEBP & COMPRESSING...
+              <div className="w-full h-72 sm:h-80 border-2 border-dashed border-[#DDD6CA] bg-[#F4F0EA] flex flex-col items-center justify-center p-6 text-center rounded-xl">
+                <Loader2 className="w-8 h-8 text-[#1C1917] animate-spin mb-3" />
+                <span className="font-semibold text-[#1C1917] text-base block mb-1">
+                  Optimizing image...
                 </span>
-                <span className="text-[10px] text-neutral-400 uppercase tracking-widest">
-                  Auto-optimizing dimensions & format
+                <span className="text-sm text-stone-500 font-mono">
+                  Converting to high-efficiency WebP
                 </span>
               </div>
             ) : !previewUrl && !externalUrl ? (
@@ -226,14 +236,19 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full h-64 border-2 border-dashed border-white/20 hover:border-white bg-[#151515] flex flex-col items-center justify-center cursor-pointer p-6 text-center transition-all group"
+                className="w-full h-72 sm:h-80 border-2 border-dashed border-[#DDD6CA] hover:border-[#1C1917] bg-[#F4F0EA]/70 hover:bg-[#EAE4D9]/80 flex flex-col items-center justify-center cursor-pointer p-6 text-center transition-all group rounded-xl"
               >
-                <Upload className="w-8 h-8 text-neutral-400 group-hover:text-white group-hover:scale-110 transition-all mb-3" />
-                <span className="font-bold text-white uppercase tracking-wider block mb-1">
-                  DROP ANY IMAGE HERE
+                <div className="w-12 h-12 rounded-full bg-[#FAF7F2] border border-[#DDD6CA] flex items-center justify-center mb-3 text-stone-800 shadow-xs group-hover:scale-105 transition-transform">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <span className="font-bold text-[#1C1917] text-base block mb-1">
+                  Choose image or drag file here
                 </span>
-                <span className="text-[10px] text-neutral-500 uppercase">
-                  JPEG, PNG, HEIC, TIFF, AVIF → AUTO-CONVERT TO WEBP & COMPRESS
+                <span className="text-xs sm:text-sm text-stone-500 max-w-[260px] leading-relaxed">
+                  JPEG, PNG, HEIC, TIFF (auto-converted to WebP)
+                </span>
+                <span className="mt-4 px-4 py-2 bg-[#1C1917] text-[#FAF7F2] text-xs sm:text-sm font-semibold rounded-lg group-hover:bg-[#292524] transition-colors shadow-xs">
+                  Browse files
                 </span>
                 <input
                   ref={fileInputRef}
@@ -246,178 +261,208 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                 />
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="relative w-full h-64 bg-black border border-white/20 overflow-hidden">
+              <div className="space-y-4">
+                <div className="relative w-full h-72 sm:h-80 bg-stone-950 border border-[#DDD6CA] overflow-hidden rounded-xl group shadow-inner">
                   <Image
                     src={previewUrl || externalUrl}
                     alt="Preview"
                     fill
                     className="object-contain"
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedFile(null);
-                      setPreviewUrl(null);
-                      setConversionStats(null);
-                      setExternalUrl("");
-                    }}
-                    className="absolute top-2 right-2 p-1.5 bg-black/80 text-white border border-white/20 hover:bg-red-600 transition-colors cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setPreviewUrl(null);
+                        setConversionStats(null);
+                        setExternalUrl("");
+                      }}
+                      className="px-4 py-2 bg-[#FAF7F2] text-[#1C1917] hover:bg-[#EAE4D9] text-sm font-semibold rounded-lg transition-colors cursor-pointer shadow-md"
+                    >
+                      Remove & Replace
+                    </button>
+                  </div>
                 </div>
 
-                {/* WebP Compression Statistics Metric Card */}
+                {/* Compression Statistics */}
                 {conversionStats && (
-                  <div className="p-2.5 bg-black/80 border border-emerald-500/40 text-emerald-300">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-emerald-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        CONVERTED TO WEBP (COMPRESSED)
-                      </span>
-                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 border border-emerald-500/40 uppercase">
-                        -{conversionStats.compressionRatio}% SIZE REDUCED
+                  <div className="p-4 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl text-sm font-mono text-stone-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-stone-600 font-sans font-medium">WebP Compression</span>
+                      <span className="text-emerald-700 font-bold font-sans">
+                        -{conversionStats.compressionRatio}% smaller
                       </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-[10px] pt-1.5 border-t border-emerald-500/20 text-neutral-300">
-                      <div>
-                        <span className="text-neutral-500 block text-[9px] uppercase">Original:</span>
-                        <span className="font-mono">{formatBytes(conversionStats.originalSize)}</span>
-                      </div>
-                      <div>
-                        <span className="text-neutral-500 block text-[9px] uppercase">WebP:</span>
-                        <span className="font-mono text-emerald-400 font-bold">
-                          {formatBytes(conversionStats.compressedSize)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-neutral-500 block text-[9px] uppercase">Dims:</span>
-                        <span className="font-mono">
-                          {conversionStats.width}×{conversionStats.height}px
-                        </span>
-                      </div>
+                    <div className="text-xs text-stone-600 space-y-1">
+                      <div>File size: <span className="line-through text-stone-400">{formatBytes(conversionStats.originalSize)}</span> → <span className="font-bold text-[#1C1917]">{formatBytes(conversionStats.compressedSize)}</span></div>
+                      <div>Render bounds: {conversionStats.width} × {conversionStats.height} px</div>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Alternative External URL toggle */}
-            <div className="mt-3">
+            {/* Direct URL input alternative */}
+            <div>
               <button
                 type="button"
                 onClick={() => setUseExternalUrl(!useExternalUrl)}
-                className="text-[10px] text-neutral-400 hover:text-white uppercase tracking-wider underline"
+                className="text-sm font-medium text-stone-600 hover:text-[#1C1917] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
               >
-                {useExternalUrl ? "← Switch to file upload" : "Or use direct image URL →"}
+                {useExternalUrl ? (
+                  <>
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Upload local image file instead</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Or link external image URL</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
               {useExternalUrl && (
                 <input
                   type="url"
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://..."
                   value={externalUrl}
                   onChange={(e) => setExternalUrl(e.target.value)}
-                  className="w-full mt-2 bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs focus:outline-none focus:border-white"
+                  className="w-full mt-2.5 bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
                 />
               )}
             </div>
           </div>
 
-          {/* Core Metadata Fields */}
-          <div className="md:col-span-6 space-y-4">
+          {/* Right Column: Metadata Fields */}
+          <div className="lg:col-span-7 space-y-4">
             <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Visual Title *
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Photograph Title *
               </label>
               <input
                 required
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="E.G. RED ROCKS ENCORE SOLITUDE"
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs uppercase focus:outline-none focus:border-white font-bold"
+                placeholder="e.g. After Hours Arena Tour"
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Series / Project / Story (Appears in Sidebar)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Series / Project / Story (Appears in Public Sidebar)
               </label>
               <input
                 type="text"
                 value={seriesOrProject}
                 onChange={(e) => setSeriesOrProject(e.target.value)}
-                placeholder="E.G. Netflix x The Four Seasons, Taika Waititi for WIRED..."
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs focus:outline-none focus:border-white"
+                placeholder="e.g. Jessica Chastain for Marie Claire, Coachella Midnight"
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Description / Editorial Notes
+              </label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Additional context, notes, or caption..."
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <InstagramIcon className="w-4 h-4 text-pink-600" />
+                  Instagram Post Link
+                </span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
+              </label>
+              <input
+                type="url"
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                placeholder="https://www.instagram.com/p/..."
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
+              />
+              <p className="text-xs text-stone-500 mt-1">
+                Allows visitors to click &quot;View and comment on Instagram ↗&quot; to open the post directly in a new tab.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
                   Category *
                 </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as GalleryCategory)}
-                  className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
                 >
-                  <option value="people">People / Editorial</option>
-                  <option value="concerts">Concerts</option>
-                  <option value="singers">Singers</option>
-                  <option value="weddings">Weddings</option>
-                  <option value="events">Events</option>
+                  <option value="people">Portraits & People</option>
+                  <option value="concerts">Live & Concerts</option>
+                  <option value="singers">Vocalists & Singers</option>
+                  <option value="weddings">Weddings & Ceremonies</option>
+                  <option value="events">Festivals & Events</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
                   Aspect Ratio
                 </label>
                 <select
                   value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value as "portrait" | "landscape" | "square" | "tall")}
-                  className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
+                  onChange={(e) =>
+                    setAspectRatio(e.target.value as "portrait" | "landscape" | "square" | "tall")
+                  }
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
                 >
                   <option value="portrait">Portrait (3:4)</option>
-                  <option value="tall">Tall (9:16)</option>
                   <option value="landscape">Landscape (16:9)</option>
                   <option value="square">Square (1:1)</option>
+                  <option value="tall">Tall / Mobile (9:16)</option>
                 </select>
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Artist / Couple / Subject
-              </label>
-              <input
-                type="text"
-                value={artist}
-                onChange={(e) => setArtist(e.target.value)}
-                placeholder="E.G. Dua Lipa / Eleanor & Julian"
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs uppercase focus:outline-none focus:border-white"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                  Location / Venue
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Artist / Subject
+                </label>
+                <input
+                  type="text"
+                  value={artist}
+                  onChange={(e) => setArtist(e.target.value)}
+                  placeholder="e.g. The Weeknd"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Location
                 </label>
                 <input
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="E.G. Red Rocks, CO"
-                  className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs uppercase focus:outline-none focus:border-white"
+                  placeholder="e.g. SoFi Stadium, LA"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
                   Year
                 </label>
                 <input
@@ -425,137 +470,167 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                   value={year}
                   onChange={(e) => setYear(e.target.value)}
                   placeholder="2026"
-                  className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs uppercase focus:outline-none focus:border-white"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
                 />
               </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Tags (comma separated)
+              </label>
+              <input
+                type="text"
+                value={tagsString}
+                onChange={(e) => setTagsString(e.target.value)}
+                placeholder="Editorial, Tour, Leica, Direct Flash"
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
+              />
+            </div>
+
+            {/* Feature, Iris & Footer Trail Toggles */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <label className="flex items-center gap-3 p-3.5 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Featured Hero
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Lead highlight in portfolio
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3.5 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isIrisItem}
+                  onChange={(e) => setIsIrisItem(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Iris Aperture Ring
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Intro sequence
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3.5 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isFooterTrailItem}
+                  onChange={(e) => setIsFooterTrailItem(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Footer Trail
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Mouse cursor trail
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Collapsible EXIF Camera Specs */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowExifFields(!showExifFields)}
+                className="flex items-center gap-2 text-sm font-semibold text-stone-700 hover:text-[#1C1917] transition-colors cursor-pointer"
+              >
+                <Sliders className="w-4 h-4" />
+                <span>{showExifFields ? "Hide Camera Specs" : "Add Camera & Lens Specs (Optional)"}</span>
+              </button>
+
+              {showExifFields && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3 p-4 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl">
+                  <div className="col-span-2 sm:col-span-2">
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      Camera Body
+                    </label>
+                    <input
+                      type="text"
+                      value={camera}
+                      onChange={(e) => setCamera(e.target.value)}
+                      placeholder="Sony A1 / Leica M11"
+                      className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-[#1C1917] text-sm rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      Lens
+                    </label>
+                    <input
+                      type="text"
+                      value={lens}
+                      onChange={(e) => setLens(e.target.value)}
+                      placeholder="50mm f/1.2"
+                      className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-[#1C1917] text-sm rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      ISO
+                    </label>
+                    <input
+                      type="text"
+                      value={iso}
+                      onChange={(e) => setIso(e.target.value)}
+                      placeholder="800"
+                      className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-[#1C1917] text-sm rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      Aperture
+                    </label>
+                    <input
+                      type="text"
+                      value={aperture}
+                      onChange={(e) => setAperture(e.target.value)}
+                      placeholder="f/2.8"
+                      className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-[#1C1917] text-sm rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Camera EXIF Details */}
-        <div className="border-t border-white/10 pt-4">
-          <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-[11px] mb-3">
-            <Camera className="w-3.5 h-3.5 text-red-500" />
-            <span>EXIF Camera & Settings Metadata</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div>
-              <label className="block text-[9px] uppercase text-neutral-400 tracking-wider mb-1">Body</label>
-              <input
-                type="text"
-                value={camera}
-                onChange={(e) => setCamera(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] uppercase text-neutral-400 tracking-wider mb-1">Glass</label>
-              <input
-                type="text"
-                value={lens}
-                onChange={(e) => setLens(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] uppercase text-neutral-400 tracking-wider mb-1">ISO</label>
-              <input
-                type="text"
-                value={iso}
-                onChange={(e) => setIso(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] uppercase text-neutral-400 tracking-wider mb-1">Aperture</label>
-              <input
-                type="text"
-                value={aperture}
-                onChange={(e) => setAperture(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] uppercase text-neutral-400 tracking-wider mb-1">Shutter</label>
-              <input
-                type="text"
-                value={shutter}
-                onChange={(e) => setShutter(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-white"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Tags and Featured toggle */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 border-t border-white/10 pt-4">
-          <div className="sm:col-span-8">
-            <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-              Visual Tags (comma-separated)
-            </label>
-            <input
-              type="text"
-              value={tagsString}
-              onChange={(e) => setTagsString(e.target.value)}
-              placeholder="Pyro, Arena, Red Wash, Vocalist"
-              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white placeholder:text-neutral-600 text-xs focus:outline-none focus:border-white"
-            />
-          </div>
-
-          <div className="sm:col-span-4 flex flex-col gap-2 justify-end">
-            <label className="flex items-center gap-2 cursor-pointer p-2 border border-white/10 bg-[#181818] w-full">
-              <input
-                type="checkbox"
-                checked={isFeatured}
-                onChange={(e) => setIsFeatured(e.target.checked)}
-                className="accent-red-600 w-4 h-4"
-              />
-              <span className="text-[10px] uppercase font-bold text-neutral-300">
-                Feature on Hero
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer p-2 border border-white/10 bg-[#181818] w-full">
-              <input
-                type="checkbox"
-                checked={isIrisItem}
-                onChange={(e) => setIsIrisItem(e.target.checked)}
-                className="accent-red-600 w-4 h-4"
-              />
-              <span className="text-[10px] uppercase font-bold text-red-400">
-                ★ Include in Iris Animation
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+        {/* Footer Actions */}
+        <div className="flex items-center justify-end gap-3 pt-5 border-t border-[#DDD6CA]">
           <button
             type="button"
             onClick={onCancel}
-            disabled={uploading}
-            className="px-4 py-2.5 border border-white/10 hover:border-white text-neutral-400 hover:text-white uppercase tracking-wider text-xs"
+            className="px-5 py-2.5 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold transition-colors cursor-pointer"
           >
             Cancel
           </button>
 
           <button
             type="submit"
-            disabled={uploading}
-            className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest text-xs flex items-center gap-2 disabled:opacity-50 transition-colors"
+            disabled={uploading || converting}
+            className="px-6 py-2.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors disabled:opacity-50 cursor-pointer rounded-lg shadow-sm"
           >
             {uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>INDEXING ASSET...</span>
-              </>
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
+                <span>Publishing to Archive...</span>
+              </span>
             ) : (
-              <>
-                <Upload className="w-4 h-4" />
-                <span>SAVE & PUBLISH TO LIVE GALLERY</span>
-              </>
+              <span>Publish Photograph</span>
             )}
           </button>
         </div>

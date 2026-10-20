@@ -1,5 +1,5 @@
 import HomePage from "../page";
 
 export default function PeoplePage() {
-  return <HomePage />;
+  return <HomePage initialFilter="people" />;
 }

@@ -11,33 +11,8 @@ interface IrisGalleryProps {
   onComplete?: () => void;
 }
 
-// 24 high-fashion editorial portraits fallback - compressed for instant loading
-const DEFAULT_IRIS_PHOTOS = [
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1517841905240-472988babdf9?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1548142813-c348350df52b?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1528892952291-009c663ce843?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1519741497674-611481863552?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=60&w=280&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=60&w=280&auto=format&fit=crop",
-];
+// Fallback iris portraits when no database items exist
+const DEFAULT_IRIS_PHOTOS: string[] = [];
 
 export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,7 +82,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
 
     let animFrameId: number;
     const startTime = performance.now();
-    const totalDuration = 4600; // Extended to 4.6s so images are clearly visible
+    const totalDuration = photoUrls.length > 0 ? 4600 : 2200; // 4.6s when iris images present, 2.2s for clean title welcome
     const numCards = photoUrls.length;
 
     const animate = (now: number) => {
@@ -145,7 +120,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
         // Subtle individual tilt keeping portraits upright
         const individualTilt = Math.sin(theta) * 10 * (1 - easeExpand * 0.6) + bladeTilt;
 
-        cardEl.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), 0px) rotate(${individualTilt.toFixed(2)}deg) scale(${cardScale.toFixed(3)})`;
+        cardEl.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0px) rotate(${individualTilt.toFixed(1)}deg) scale(${cardScale.toFixed(2)})`;
         cardEl.style.opacity = irisOpacity.toFixed(3);
       }
 
@@ -203,14 +178,14 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
           const init = initialLayout[i] || { x: 0, y: 0, bladeTilt: 0, zIndex: 1 };
           return (
             <div
-              key={i}
+              key={url + "_" + i}
               ref={(el) => {
                 cardsRef.current[i] = el;
               }}
               suppressHydrationWarning
-              className="absolute left-1/2 top-1/2 will-change-transform"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 will-change-transform"
               style={{
-                transform: `translate3d(calc(-50% + ${init.x}px), calc(-50% + ${init.y}px), 0px) rotate(${init.bladeTilt}deg) scale(0.82)`,
+                transform: `translate3d(${init.x}px, ${init.y}px, 0px) rotate(${init.bladeTilt}deg) scale(0.82)`,
                 zIndex: init.zIndex,
               }}
             >

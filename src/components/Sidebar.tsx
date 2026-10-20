@@ -5,6 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { GalleryItem } from "@/types/gallery";
+import {
+  CATEGORY_DISPLAY_LABELS,
+  normalizeCategory,
+  getCategoryDisplayLabel,
+} from "@/lib/filter-utils";
 
 interface SidebarProps {
   items: GalleryItem[];
@@ -13,7 +18,7 @@ interface SidebarProps {
   brandName?: string;
 }
 
-export default function Sidebar({
+function Sidebar({
   items,
   activeFilter = "all",
   onSelectFilter,
@@ -23,43 +28,76 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
 
-  // Extract dynamic categories and series from live gallery items
+  // Extract dynamic categories, series, and tags from live gallery items
   const dynamicSections = React.useMemo(() => {
     const list: { label: string; filterValue: string; count: number }[] = [];
     const seen = new Set<string>();
 
-    // 1. Gather all unique series or projects first (editorial series like Jessica Chou's list)
-    items.forEach((item) => {
-      if (item.seriesOrProject && item.seriesOrProject.trim()) {
-        const val = item.seriesOrProject.trim();
-        const key = val.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          const count = items.filter(
-            (i) => i.seriesOrProject && i.seriesOrProject.trim().toLowerCase() === key
-          ).length;
-          list.push({ label: val, filterValue: val, count });
-        }
+    // 1. Core Category counts
+    const categoryCounts: Record<string, number> = {};
+    for (const itm of items) {
+      if (itm.category) {
+        const norm = normalizeCategory(itm.category);
+        categoryCounts[norm] = (categoryCounts[norm] || 0) + 1;
       }
-    });
+    }
 
-    // 2. Also ensure primary categories (like Weddings, Concerts, Portraits, etc.) exist if not already covered
-    const categoryLabels: Record<string, string> = {
-      people: "Portraits & People",
-      concerts: "Live & Concerts",
-      singers: "Vocalists & Singers",
-      weddings: "Weddings & Ceremonies",
-      events: "Festivals & Events",
-    };
-
-    items.forEach((item) => {
-      const cat = item.category?.trim();
-      if (cat && !seen.has(cat.toLowerCase())) {
-        const label = categoryLabels[cat.toLowerCase()] || cat.charAt(0).toUpperCase() + cat.slice(1);
+    // Include primary categories that have items, or key portfolio sections
+    const standardCategories = ["people", "concerts", "singers", "weddings", "events"];
+    for (const cat of standardCategories) {
+      const count = categoryCounts[cat] || 0;
+      if (count > 0 || items.length === 0) {
+        const label = CATEGORY_DISPLAY_LABELS[cat] || cat;
         seen.add(cat.toLowerCase());
-        const count = items.filter((i) => i.category?.toLowerCase() === cat.toLowerCase()).length;
+        seen.add(label.toLowerCase());
         list.push({ label, filterValue: cat, count });
       }
+    }
+
+    // 2. Series / Projects
+    const seriesCounts = new Map<string, { label: string; count: number }>();
+    for (const itm of items) {
+      if (itm.seriesOrProject && itm.seriesOrProject.trim()) {
+        const val = itm.seriesOrProject.trim();
+        const key = val.toLowerCase();
+        if (!seen.has(key)) {
+          const existing = seriesCounts.get(key);
+          if (existing) {
+            existing.count++;
+          } else {
+            seriesCounts.set(key, { label: val, count: 1 });
+          }
+        }
+      }
+    }
+
+    seriesCounts.forEach((val, key) => {
+      seen.add(key);
+      list.push({ label: val.label, filterValue: val.label, count: val.count });
+    });
+
+    // 3. Distinct Tags (e.g. "testing", "tesying description")
+    const tagCounts = new Map<string, { label: string; count: number }>();
+    for (const itm of items) {
+      if (itm.tags && Array.isArray(itm.tags)) {
+        for (const tag of itm.tags) {
+          const val = tag.trim();
+          const key = val.toLowerCase();
+          if (!seen.has(key) && !seen.has(normalizeCategory(key))) {
+            const existing = tagCounts.get(key);
+            if (existing) {
+              existing.count++;
+            } else {
+              tagCounts.set(key, { label: val, count: 1 });
+            }
+          }
+        }
+      }
+    }
+
+    tagCounts.forEach((val, key) => {
+      seen.add(key);
+      list.push({ label: val.label, filterValue: val.label, count: val.count });
     });
 
     return list;
@@ -69,9 +107,13 @@ export default function Sidebar({
     setMobileOpen(false);
     if (pathname === "/") {
       onSelectFilter?.(filterVal);
+      if (typeof window !== "undefined") {
+        const url = filterVal === "all" ? "/" : `/?filter=${encodeURIComponent(filterVal)}`;
+        window.history.pushState(null, "", url);
+      }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      router.push(`/?filter=${encodeURIComponent(filterVal)}`);
+      router.push(filterVal === "all" ? "/" : `/?filter=${encodeURIComponent(filterVal)}`);
     }
   };
 
@@ -93,7 +135,7 @@ export default function Sidebar({
           }}
           className="inline-block group"
         >
-          <h1 className="font-artistic font-normal text-3xl sm:text-[36px] tracking-[0.02em] text-neutral-950 group-hover:opacity-75 transition-opacity leading-none">
+          <h1 className="font-artistic font-semibold text-3xl sm:text-[36px] tracking-[0.02em] text-neutral-950 group-hover:opacity-75 transition-opacity leading-none">
             {brandName}
           </h1>
         </Link>
@@ -149,9 +191,12 @@ export default function Sidebar({
       {/* Dynamic Editorial Series / Categories List */}
       <div className="flex flex-col space-y-2.5 text-[15.5px] sm:text-[16.5px] font-serif-elegant pb-12">
         {dynamicSections.map((sec) => {
+          const filterLower = activeFilter.toLowerCase().trim();
+          const secFilterLower = sec.filterValue.toLowerCase().trim();
           const isActive =
             pathname === "/" &&
-            activeFilter.toLowerCase() === sec.filterValue.toLowerCase();
+            (filterLower === secFilterLower ||
+              normalizeCategory(filterLower) === normalizeCategory(secFilterLower));
           return (
             <button
               key={sec.filterValue}
@@ -183,7 +228,7 @@ export default function Sidebar({
               handleSelectFilter("all");
             }
           }}
-          className="font-artistic font-normal text-2xl tracking-[0.02em] text-neutral-950"
+          className="font-artistic font-semibold text-2xl tracking-[0.02em] text-neutral-950"
         >
           {brandName}
         </Link>
@@ -199,8 +244,8 @@ export default function Sidebar({
 
       {/* Mobile Drawer */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-start">
-          <div className="relative w-4/5 max-w-xs h-full bg-[#FAF9F6] shadow-2xl overflow-y-auto">
+        <div data-lenis-prevent="true" className="lg:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-start">
+          <div data-lenis-prevent="true" className="relative w-4/5 max-w-xs h-full bg-[#FAF9F6] shadow-2xl overflow-y-auto overscroll-contain">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
@@ -224,3 +269,5 @@ export default function Sidebar({
     </>
   );
 }
+
+export default React.memo(Sidebar);

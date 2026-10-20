@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { GalleryItem, GalleryCategory } from "@/types/gallery";
-import { X, Check, Camera, Trash2 } from "lucide-react";
+import {
+  X,
+  Trash2,
+} from "lucide-react";
+import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface EditItemModalProps {
   item: GalleryItem | null;
@@ -21,6 +25,7 @@ export default function EditItemModal({
   if (!item) return null;
 
   const [title, setTitle] = useState(item.title);
+  const [description, setDescription] = useState(item.description || "");
   const [seriesOrProject, setSeriesOrProject] = useState(item.seriesOrProject || "");
   const [category, setCategory] = useState<GalleryCategory>(item.category);
   const [artist, setArtist] = useState(item.artist || "");
@@ -32,7 +37,9 @@ export default function EditItemModal({
   const [isFeatured, setIsFeatured] = useState(item.isFeatured);
   const [isVisible, setIsVisible] = useState(item.isVisible);
   const [isIrisItem, setIsIrisItem] = useState(Boolean(item.isIrisItem));
+  const [isFooterTrailItem, setIsFooterTrailItem] = useState(Boolean(item.isFooterTrailItem));
   const [tagsString, setTagsString] = useState(item.tags?.join(", ") || "");
+  const [instagramUrl, setInstagramUrl] = useState(item.instagramUrl || "");
 
   // EXIF
   const [camera, setCamera] = useState(item.exif?.camera || "");
@@ -40,6 +47,27 @@ export default function EditItemModal({
   const [iso, setIso] = useState(item.exif?.iso || "");
   const [aperture, setAperture] = useState(item.exif?.aperture || "");
   const [shutter, setShutter] = useState(item.exif?.shutter || "");
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const lenis = (window as unknown as { __lenis?: { stop: () => void; start: () => void } }).__lenis;
+    lenis?.stop();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      lenis?.start();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,15 +78,18 @@ export default function EditItemModal({
 
     onSave(item.id, {
       title,
+      description: description.trim() || undefined,
       seriesOrProject: seriesOrProject.trim() || undefined,
       category,
       artist: artist.trim() || undefined,
       location: location.trim() || undefined,
       year: year.trim() || undefined,
       aspectRatio,
+      instagramUrl: instagramUrl.trim() || undefined,
       isFeatured,
       isVisible,
       isIrisItem,
+      isFooterTrailItem,
       tags: tags.length > 0 ? tags : undefined,
       exif: {
         camera,
@@ -72,27 +103,43 @@ export default function EditItemModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none">
-      <div className="bg-[#111111] border border-white/20 p-6 sm:p-8 font-mono-brutal text-xs max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] text-red-500 font-bold uppercase tracking-widest">
-              // EDIT METADATA
-            </span>
-            <span className="text-white font-bold">#{item.orderIndex + 1}</span>
+    <div
+      data-lenis-prevent="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-admin"
+    >
+      <div
+        data-lenis-prevent="true"
+        onWheel={(e) => e.stopPropagation()}
+        className="bg-[#FAF7F2] border border-[#DDD6CA] p-6 sm:p-8 text-[#1C1917] max-w-2xl w-full max-h-[92vh] overflow-y-auto overscroll-contain rounded-2xl shadow-2xl"
+      >
+        {/* Top Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-[#DDD6CA] mb-5">
+          <div>
+            <h3 className="text-xl sm:text-2xl font-bold text-[#1C1917] tracking-tight">
+              Edit Photograph
+            </h3>
+            <p className="text-sm text-stone-600 mt-0.5">
+              Update metadata, exhibition category, and EXIF specs
+            </p>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 border border-white/10 hover:border-white text-neutral-400 hover:text-white"
+            type="button"
+            aria-label="Close"
+            className="p-2 text-stone-500 hover:text-[#1C1917] hover:bg-[#EAE4D9] rounded-lg transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="flex gap-4 items-center p-3 bg-black border border-white/10">
-            <div className="relative w-20 h-20 shrink-0 bg-neutral-900 border border-white/15">
+          {/* Visual Preview Banner */}
+          <div className="flex items-center gap-4 p-3.5 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl">
+            <div className="relative w-14 h-16 shrink-0 bg-stone-900 border border-[#DDD6CA] overflow-hidden rounded-md">
               <Image
                 src={item.imageUrl}
                 alt={item.title}
@@ -100,192 +147,330 @@ export default function EditItemModal({
                 className="object-cover"
               />
             </div>
-            <div className="min-w-0">
-              <span className="text-[10px] text-neutral-400 uppercase">Storage Path:</span>
-              <p className="text-[11px] text-white truncate font-mono">{item.storagePath}</p>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs text-stone-500 font-mono block">
+                ORDER #{item.orderIndex + 1}
+              </span>
+              <h4 className="text-sm sm:text-base font-semibold text-[#1C1917] truncate">
+                {item.title}
+              </h4>
+              <p className="text-xs text-stone-600 truncate">
+                {item.seriesOrProject || item.artist || "Independent Artwork"}
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-              Title
-            </label>
-            <input
-              required
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white font-bold"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-              Series / Project / Story Name (Appears in Sidebar)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Netflix x The Four Seasons, Taika Waititi for WIRED..."
-              value={seriesOrProject}
-              onChange={(e) => setSeriesOrProject(e.target.value)}
-              className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs focus:outline-none focus:border-white"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          {/* Form Fields */}
+          <div className="space-y-4">
             <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Category
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Photograph Title *
               </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as GalleryCategory)}
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
-              >
-                <option value="people">People / Editorial</option>
-                <option value="concerts">Concerts</option>
-                <option value="singers">Singers</option>
-                <option value="weddings">Weddings</option>
-                <option value="events">Events</option>
-              </select>
+              <input
+                required
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+              />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Aspect Ratio
-              </label>
-              <select
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value as "portrait" | "landscape" | "square" | "tall")}
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
-              >
-                <option value="portrait">Portrait (3:4)</option>
-                <option value="tall">Tall (9:16)</option>
-                <option value="landscape">Landscape (16:9)</option>
-                <option value="square">Square (1:1)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Artist / Subject
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Series / Project / Story (Appears in Portfolio Sidebar)
               </label>
               <input
                 type="text"
-                value={artist}
-                onChange={(e) => setArtist(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
+                value={seriesOrProject}
+                onChange={(e) => setSeriesOrProject(e.target.value)}
+                placeholder="e.g. Jessica Chastain for Marie Claire, Coachella Midnight"
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                Location & Venue
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Description / Editorial Notes
+              </label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Additional context, notes, or caption..."
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <InstagramIcon className="w-4 h-4 text-pink-600" />
+                  Instagram Post Link
+                </span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
+              </label>
+              <input
+                type="url"
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                placeholder="https://www.instagram.com/p/..."
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+              />
+              <p className="text-xs text-stone-500 mt-1">
+                When provided, visitors will see &quot;View and comment on Instagram ↗&quot; next to the photo description.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Category *
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as GalleryCategory)}
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
+                >
+                  <option value="people">Portraits & People</option>
+                  <option value="concerts">Live & Concerts</option>
+                  <option value="singers">Vocalists & Singers</option>
+                  <option value="weddings">Weddings & Ceremonies</option>
+                  <option value="events">Festivals & Events</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Aspect Ratio
+                </label>
+                <select
+                  value={aspectRatio}
+                  onChange={(e) =>
+                    setAspectRatio(e.target.value as "portrait" | "landscape" | "square" | "tall")
+                  }
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
+                >
+                  <option value="portrait">Portrait (3:4)</option>
+                  <option value="landscape">Landscape (16:9)</option>
+                  <option value="square">Square (1:1)</option>
+                  <option value="tall">Tall / Mobile (9:16)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Artist / Subject
+                </label>
+                <input
+                  type="text"
+                  value={artist}
+                  onChange={(e) => setArtist(e.target.value)}
+                  placeholder="e.g. Billie Eilish"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. SoFi Stadium, LA"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                  Year
+                </label>
+                <input
+                  type="text"
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  placeholder="2026"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3 py-2 text-[#1C1917] placeholder:text-stone-400 text-sm rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
+                Tags (comma separated)
               </label>
               <input
                 type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
+                value={tagsString}
+                onChange={(e) => setTagsString(e.target.value)}
+                placeholder="Editorial, Tour, Leica, Direct Flash"
+                className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
               />
+            </div>
+
+            {/* Visibility & Curation Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              <label className="flex items-center gap-3 p-3 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  onChange={(e) => setIsVisible(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Public
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Live site
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Featured
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Hero highlight
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isIrisItem}
+                  onChange={(e) => setIsIrisItem(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Iris Intro
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Aperture ring
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl cursor-pointer hover:border-stone-400 hover:bg-[#EAE4D9]/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isFooterTrailItem}
+                  onChange={(e) => setIsFooterTrailItem(e.target.checked)}
+                  className="w-4 h-4 accent-stone-900 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-sm text-[#1C1917] block">
+                    Footer Trail
+                  </span>
+                  <span className="text-xs text-stone-600">
+                    Cursor animation
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* EXIF Camera Specs */}
+            <div className="pt-1">
+              <span className="block text-sm font-semibold text-stone-800 mb-2">
+                Camera & Lens Technical EXIF (Optional)
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 p-3.5 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl">
+                <div className="col-span-2 sm:col-span-2">
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Camera
+                  </label>
+                  <input
+                    type="text"
+                    value={camera}
+                    onChange={(e) => setCamera(e.target.value)}
+                    placeholder="Leica M11"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-2.5 py-1.5 text-[#1C1917] text-sm rounded-md focus:outline-none focus:border-[#1C1917]"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Lens
+                  </label>
+                  <input
+                    type="text"
+                    value={lens}
+                    onChange={(e) => setLens(e.target.value)}
+                    placeholder="50mm f/0.95"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-2.5 py-1.5 text-[#1C1917] text-sm rounded-md focus:outline-none focus:border-[#1C1917]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    ISO
+                  </label>
+                  <input
+                    type="text"
+                    value={iso}
+                    onChange={(e) => setIso(e.target.value)}
+                    placeholder="800"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-2.5 py-1.5 text-[#1C1917] text-sm rounded-md focus:outline-none focus:border-[#1C1917]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Aperture
+                  </label>
+                  <input
+                    type="text"
+                    value={aperture}
+                    onChange={(e) => setAperture(e.target.value)}
+                    placeholder="f/1.2"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-2.5 py-1.5 text-[#1C1917] text-sm rounded-md focus:outline-none focus:border-[#1C1917]"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-white/10 pt-3">
-            <span className="text-[10px] text-neutral-400 uppercase tracking-widest block mb-2">
-              EXIF Info
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                placeholder="Camera"
-                value={camera}
-                onChange={(e) => setCamera(e.target.value)}
-                className="bg-[#181818] border border-white/10 px-2 py-1 text-white text-[11px]"
-              />
-              <input
-                placeholder="Lens"
-                value={lens}
-                onChange={(e) => setLens(e.target.value)}
-                className="bg-[#181818] border border-white/10 px-2 py-1 text-white text-[11px]"
-              />
-              <input
-                placeholder="ISO"
-                value={iso}
-                onChange={(e) => setIso(e.target.value)}
-                className="bg-[#181818] border border-white/10 px-2 py-1 text-white text-[11px]"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6 border-t border-white/10 pt-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isVisible}
-                onChange={(e) => setIsVisible(e.target.checked)}
-                className="accent-red-600"
-              />
-              <span className="text-[10px] uppercase font-bold text-neutral-300">
-                Visible on Live Site
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isFeatured}
-                onChange={(e) => setIsFeatured(e.target.checked)}
-                className="accent-red-600"
-              />
-              <span className="text-[10px] uppercase font-bold text-neutral-300">
-                Featured Card
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isIrisItem}
-                onChange={(e) => setIsIrisItem(e.target.checked)}
-                className="accent-red-600"
-              />
-              <span className="text-[10px] uppercase font-bold text-red-400">
-                ★ Include in Iris Animation
-              </span>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-5 border-t border-[#DDD6CA]">
             <button
               type="button"
               onClick={() => {
-                if (confirm(`Are you sure you want to delete "${item.title}"?`)) {
+                if (confirm(`Permanently delete "${item.title}" from the portfolio?`)) {
                   onDelete(item.id);
                   onClose();
                 }
               }}
-              className="text-red-400 hover:text-red-300 flex items-center gap-1.5 uppercase text-xs"
+              className="flex items-center gap-1.5 px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-sm font-semibold rounded-lg transition-colors cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Asset</span>
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Photo</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 border border-white/10 hover:border-white text-neutral-400 hover:text-white uppercase text-xs"
+                className="px-4 py-2 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold rounded-lg transition-colors cursor-pointer"
               >
                 Cancel
               </button>
+
               <button
                 type="submit"
-                className="px-5 py-2 bg-white hover:bg-neutral-200 text-black font-bold uppercase text-xs flex items-center gap-1.5"
+                className="px-6 py-2 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors cursor-pointer rounded-lg shadow-sm"
               >
-                <Check className="w-4 h-4" />
-                <span>Save Changes</span>
+                Save Changes
               </button>
             </div>
           </div>

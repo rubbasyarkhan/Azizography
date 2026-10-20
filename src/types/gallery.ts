@@ -11,6 +11,7 @@ export interface GalleryItem {
   isFeatured: boolean;
   isVisible: boolean;
   isIrisItem?: boolean; // When true, appears in the Iris loading animation
+  isFooterTrailItem?: boolean; // When true, curated for the interactive footer mouse trail
   createdAt: string; // ISO date string
   artist?: string;
   location?: string;
@@ -27,6 +28,8 @@ export interface GalleryItem {
     shutter?: string;
   };
   tags?: string[];
+  description?: string;
+  instagramUrl?: string; // Direct link to Instagram post / reel for "View and comment on Instagram"
 }
 
 export interface AdminUser {

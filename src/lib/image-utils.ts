@@ -118,21 +118,23 @@ export async function convertAndCompressToWebP(
   img.crossOrigin = "anonymous";
 
   let objectUrlToRevoke: string | null = null;
-  if (typeof input === "string") {
-    img.src = input;
-  } else {
-    objectUrlToRevoke = URL.createObjectURL(input);
-    img.src = objectUrlToRevoke;
-  }
+  try {
+    if (typeof input === "string") {
+      img.src = input;
+    } else {
+      objectUrlToRevoke = URL.createObjectURL(input);
+      img.src = objectUrlToRevoke;
+    }
 
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () =>
-      reject(new Error("Unable to decode image. Please ensure the file is a valid image."));
-  });
-
-  if (objectUrlToRevoke) {
-    URL.revokeObjectURL(objectUrlToRevoke);
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () =>
+        reject(new Error("Unable to decode image. Please ensure the file is a valid image."));
+    });
+  } finally {
+    if (objectUrlToRevoke) {
+      URL.revokeObjectURL(objectUrlToRevoke);
+    }
   }
 
   // Compute scale keeping aspect ratio
@@ -174,7 +176,6 @@ export async function convertAndCompressToWebP(
   };
 
   let blob = await encodeBlob(quality);
-  let dataUrl = canvas.toDataURL("image/webp", quality);
 
   // Adaptive compression loop: if image exceeds maxSizeBytes (e.g. 480KB), tune down quality & scale
   let attempts = 0;
@@ -194,8 +195,10 @@ export async function convertAndCompressToWebP(
     }
 
     blob = await encodeBlob(quality);
-    dataUrl = canvas.toDataURL("image/webp", quality);
   }
+
+  // Generate dataUrl once for the final optimized canvas state
+  const dataUrl = canvas.toDataURL("image/webp", quality);
 
   // Create a micro 24px blur placeholder for instantaneous zero-glitch display
   let blurDataUrl: string | undefined = undefined;

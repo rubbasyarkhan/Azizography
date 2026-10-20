@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FAF9F6;
-  --foreground: #0A0A0A;
-  --card-bg: #FFFFFF;
-  --border-muted: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.22);
+  --background: #F4F0EA;
+  --foreground: #1C1917;
+  --card-bg: #FAF7F2;
+  --border-muted: rgba(60, 50, 40, 0.1);
+  --border-strong: rgba(60, 50, 40, 0.25);
 }
 
 @theme {
@@ -14,18 +14,28 @@
   --font-mono: var(--font-space-grotesk), monospace;
 }
 
-/* Custom Artistic Font Utilities */
+/* Custom Artistic Font Utilities - High Legibility Classic Editorial Serif */
 .font-italiana {
-  font-family: var(--font-italiana), var(--font-cormorant), Georgia, serif;
+  font-family: var(--font-playfair), Georgia, serif;
 }
 
 .font-artistic {
-  font-family: var(--font-italiana), var(--font-cormorant), Georgia, serif;
+  font-family: var(--font-playfair), Georgia, serif;
+  font-optical-sizing: auto;
+  font-feature-settings: "liga", "kern";
+  letter-spacing: -0.01em;
+}
+
+.font-artistic-cursive {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.015em;
 }
 
 .font-serif,
 .font-serif-elegant {
-  font-family: var(--font-cormorant), var(--font-playfair), Georgia, serif;
+  font-family: var(--font-playfair), var(--font-cormorant), Georgia, serif;
 }
 
 .font-syne,
@@ -45,7 +55,13 @@
   font-family: var(--font-space-grotesk), monospace;
 }
 
-/* Smooth Scrolling & Body setup - Pearl White Light Theme */
+/* Ergonomic Admin Portal Typography */
+.font-admin {
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  letter-spacing: -0.011em;
+}
+
+/* Smooth Scrolling & Body setup */
 html {
   scroll-behavior: smooth;
   background-color: #FAF9F6;
@@ -72,7 +88,7 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
-/* Refined Pearl White Custom Scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -83,7 +99,7 @@ html.lenis, html.lenis body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D8D6CE;
+  background: #D8D1C5;
   border-radius: 2px;
 }
 

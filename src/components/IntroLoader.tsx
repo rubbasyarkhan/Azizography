@@ -17,6 +17,12 @@ export default function IntroLoader({ onComplete, forceShow = false }: IntroLoad
 
   useEffect(() => {
     setMounted(true);
+    const container = containerRef.current;
+    return () => {
+      if (container) {
+        gsap.killTweensOf(container);
+      }
+    };
   }, []);
 
   // When forceShow is triggered, re-enable the loader

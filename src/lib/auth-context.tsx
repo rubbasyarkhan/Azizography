@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 import { auth, isFirebaseConfigured } from "./firebase";
 import {
   signInWithEmailAndPassword,
@@ -27,20 +27,18 @@ const AuthContext = createContext<AuthContextType>({
   isFirebaseActive: false,
 });
 
-const VALID_ADMIN_EMAILS = [
-  (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim(),
-  "admin@azizography.com",
-  "admin@azizograhy.com",
-].filter(Boolean);
-
-function isValidAdmin(email: string): boolean {
-  if (!email) return false;
-  return VALID_ADMIN_EMAILS.includes(email.toLowerCase().trim());
-}
-
-const DEFAULT_ADMIN_EMAIL = "admin@azizography.com";
-const DEFAULT_ADMIN_PASS = "azizography123";
+const CONFIGURED_ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
+const CONFIGURED_ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "";
 const AUTH_STORAGE_KEY = "azizography_auth_session";
+
+const isValidAdmin = (email?: string | null) => {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+  if (CONFIGURED_ADMIN_EMAIL) {
+    return normalized === CONFIGURED_ADMIN_EMAIL;
+  }
+  return true;
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<{ email: string; uid: string } | null>(null);
@@ -53,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser && firebaseUser.email) {
           setUser({ email: firebaseUser.email, uid: firebaseUser.uid });
         } else {
-          // Check if local mock session exists
+          // Check if local session exists
           checkLocalSession();
         }
         setLoading(false);
@@ -77,8 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
-    // If live Firebase auth is configured
+  const login = useCallback(async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    // 1. If live Firebase auth is configured
     if (isFirebaseConfigured && auth) {
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
@@ -91,33 +89,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       } catch (err: unknown) {
         const error = err as Error;
-        console.warn("Firebase sign in error, evaluating demo bypass:", error);
-        // If credentials match default credentials, allow demo access
-        if (isValidAdmin(email) && pass === DEFAULT_ADMIN_PASS) {
-          const demoUser = { email: email.trim(), uid: "demo-admin-uid-99" };
-          setUser(demoUser);
-          sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
+        // Check environment variable credentials
+        if (
+          CONFIGURED_ADMIN_EMAIL &&
+          CONFIGURED_ADMIN_PASS &&
+          email.toLowerCase().trim() === CONFIGURED_ADMIN_EMAIL &&
+          pass === CONFIGURED_ADMIN_PASS
+        ) {
+          const adminUser = { email: email.trim(), uid: "admin-session-active" };
+          setUser(adminUser);
+          sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(adminUser));
           return { success: true };
         }
-        return { success: false, error: error.message || "Invalid credentials" };
+        return { success: false, error: error.message || "Invalid email or password." };
       }
     }
 
-    // Local Mock / Demo Auth
-    if (isValidAdmin(email) && pass === DEFAULT_ADMIN_PASS) {
-      const demoUser = { email: email.trim(), uid: "demo-admin-uid-99" };
-      setUser(demoUser);
-      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
+    // 2. Local / Environment-Configured Admin Auth
+    if (
+      CONFIGURED_ADMIN_EMAIL &&
+      CONFIGURED_ADMIN_PASS &&
+      email.toLowerCase().trim() === CONFIGURED_ADMIN_EMAIL &&
+      pass === CONFIGURED_ADMIN_PASS
+    ) {
+      const adminUser = { email: email.trim(), uid: "admin-session-active" };
+      setUser(adminUser);
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(adminUser));
       return { success: true };
     }
 
     return {
       success: false,
-      error: "Invalid email or password. Use: admin@azizography.com / azizography123",
+      error: "Invalid email or password. Please verify your administrator credentials.",
     };
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     if (isFirebaseConfigured && auth) {
       try {
         await firebaseSignOut(auth);
@@ -127,21 +134,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
     setUser(null);
-  };
+  }, []);
 
-  const isAdmin = Boolean(user && isValidAdmin(user.email));
+  const isAdmin = Boolean(user && (user.uid === "admin-session-active" || isValidAdmin(user.email)));
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      loading,
+      isAdmin,
+      login,
+      logout,
+      isFirebaseActive: isFirebaseConfigured,
+    }),
+    [user, loading, isAdmin, login, logout]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        isAdmin,
-        login,
-        logout,
-        isFirebaseActive: isFirebaseConfigured,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

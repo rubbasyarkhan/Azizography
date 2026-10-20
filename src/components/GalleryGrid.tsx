@@ -30,7 +30,9 @@ import {
   Eye,
   EyeOff,
   Maximize2,
+  ArrowUpRight,
 } from "lucide-react";
+import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface GalleryGridProps {
   items: GalleryItem[];
@@ -42,8 +44,8 @@ interface GalleryGridProps {
   onToggleIris?: (item: GalleryItem) => void;
 }
 
-// Single Sortable Image Card for Live Drag & Drop
-function SortableImageCard({
+// Single Sortable Image Card for Live Drag & Drop (Memoized for high performance rendering)
+const SortableImageCard = React.memo(function SortableImageCard({
   item,
   index,
   isAdmin,
@@ -134,14 +136,9 @@ function SortableImageCard({
 
         {/* Minimal Editorial Overlay on Hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none flex flex-col justify-end p-5">
-          {item.seriesOrProject && (
+          {(item.seriesOrProject || item.description || item.artist) && (
             <span className="text-[10px] font-syne text-neutral-300 uppercase tracking-[0.22em] block mb-1">
-              {item.seriesOrProject}
-            </span>
-          )}
-          {item.artist && !item.seriesOrProject && (
-            <span className="text-[10px] font-syne text-neutral-300 uppercase tracking-[0.22em] block mb-1">
-              {item.artist}
+              {item.seriesOrProject || item.description || item.artist}
             </span>
           )}
           <h3 className="font-artistic text-lg sm:text-xl font-normal italic text-white leading-tight">
@@ -152,6 +149,21 @@ function SortableImageCard({
               {item.location && <span>{item.location}</span>}
               {item.location && item.year && <span>•</span>}
               {item.year && <span>{item.year}</span>}
+            </div>
+          )}
+          {item.instagramUrl && (
+            <div className="pointer-events-auto mt-2.5">
+              <a
+                href={item.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/20 hover:bg-white text-white hover:text-black backdrop-blur-md rounded text-[10px] font-syne uppercase tracking-wider transition-all"
+              >
+                <InstagramIcon className="w-3 h-3 text-pink-400" />
+                <span>View and comment on Instagram</span>
+                <ArrowUpRight className="w-3 h-3" />
+              </a>
             </div>
           )}
         </div>
@@ -214,28 +226,43 @@ function SortableImageCard({
       </div>
 
       {/* Subtle Bottom Caption for Editorial Look */}
-      <div className="pt-2.5 pb-1 flex items-baseline justify-between text-neutral-800">
-        <div className="truncate pr-2">
+      <div className="pt-2.5 pb-1 flex flex-col gap-1 text-neutral-800">
+        <div className="flex items-baseline justify-between gap-2">
           <p className="font-sans text-[13px] font-medium uppercase tracking-wider text-neutral-900 truncate">
             {item.title}
           </p>
-          {item.seriesOrProject && (
-            <p className="font-sans text-[11px] text-neutral-500 uppercase tracking-widest truncate">
-              {item.seriesOrProject}
-            </p>
+          {item.year && (
+            <span className="font-sans text-[11px] text-neutral-400 uppercase tracking-wider shrink-0">
+              {item.year}
+            </span>
           )}
         </div>
-        {item.year && (
-          <span className="font-sans text-[11px] text-neutral-400 uppercase tracking-wider shrink-0">
-            {item.year}
-          </span>
+        {(item.seriesOrProject || item.description) && (
+          <p className="font-sans text-[11px] text-neutral-500 uppercase tracking-widest line-clamp-2">
+            {item.seriesOrProject || item.description}
+          </p>
+        )}
+        {item.instagramUrl && (
+          <div className="pt-0.5">
+            <a
+              href={item.instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-stone-700 hover:text-black group/insta transition-colors"
+            >
+              <InstagramIcon className="w-3 h-3 text-pink-600 shrink-0" />
+              <span className="underline underline-offset-2">View and comment on Instagram</span>
+              <ArrowUpRight className="w-3 h-3 group-hover/insta:translate-x-0.5 group-hover/insta:-translate-y-0.5 transition-transform" />
+            </a>
+          </div>
         )}
       </div>
     </div>
   );
-}
+});
 
-export default function GalleryGrid({
+function GalleryGrid({
   items,
   onOpenLightbox,
   isAdmin = false,
@@ -245,6 +272,7 @@ export default function GalleryGrid({
   onToggleIris,
 }: GalleryGridProps) {
   const [activeDragItem, setActiveDragItem] = useState<GalleryItem | null>(null);
+  const itemIds = React.useMemo(() => items.map((i) => i.id), [items]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -311,7 +339,7 @@ export default function GalleryGrid({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext items={items.map((i) => i.id)} strategy={rectSortingStrategy}>
+          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
             {content}
           </SortableContext>
 
@@ -336,3 +364,5 @@ export default function GalleryGrid({
     </div>
   );
 }
+
+export default React.memo(GalleryGrid);

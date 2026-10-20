@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { GalleryItem } from "@/types/gallery";
@@ -16,11 +16,11 @@ import Sidebar from "@/components/Sidebar";
 import GalleryGrid from "@/components/GalleryGrid";
 import LightboxModal from "@/components/LightboxModal";
 import Footer from "@/components/Footer";
-import SmoothScroll from "@/components/SmoothScroll";
 import ImageUploader from "@/components/admin/ImageUploader";
 import EditItemModal from "@/components/admin/EditItemModal";
 import IrisManagerModal from "@/components/admin/IrisManagerModal";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { itemMatchesFilter, getCategoryDisplayLabel } from "@/lib/filter-utils";
 import {
   Plus,
   Sparkles,
@@ -29,15 +29,20 @@ import {
   ArrowRight,
   Eye,
   Sliders,
+  BookOpen,
 } from "lucide-react";
 
-function HomeContent() {
+interface HomePageProps {
+  initialFilter?: string;
+}
+
+function HomeContent({ initialFilter }: HomePageProps) {
   const { user, logout } = useAuth();
   const isAdmin = Boolean(user);
   const searchParams = useSearchParams();
 
   const [items, setItems] = useState<GalleryItem[]>(INITIAL_GALLERY_ITEMS);
-  const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [activeFilter, setActiveFilter] = useState<string>(initialFilter || "all");
   const [selectedLightboxItem, setSelectedLightboxItem] = useState<GalleryItem | null>(null);
   const [forceShowIntro, setForceShowIntro] = useState(false);
   const [introFinished, setIntroFinished] = useState(false);
@@ -47,8 +52,12 @@ function HomeContent() {
     const f = searchParams.get("filter");
     if (f) {
       setActiveFilter(f);
+    } else if (initialFilter) {
+      setActiveFilter(initialFilter);
+    } else {
+      setActiveFilter("all");
     }
-  }, [searchParams]);
+  }, [searchParams, initialFilter]);
 
   // In-situ Admin States
   const [dragEnabled, setDragEnabled] = useState(true);
@@ -56,6 +65,7 @@ function HomeContent() {
   const [showIrisManager, setShowIrisManager] = useState(false);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Subscribe to live gallery items
   useEffect(() => {
@@ -65,88 +75,80 @@ function HomeContent() {
     return () => unsubscribe();
   }, []);
 
-  // Filter items dynamically by series, category, artist, or tags
+  // Filter items dynamically by series, category, artist, description, or tags
   const filteredItems = useMemo(() => {
     return items
       .filter((item) => item.isVisible !== false)
-      .filter((item) => {
-        if (activeFilter === "all") return true;
-        const f = activeFilter.toLowerCase().trim();
-
-        // Match series/project
-        if (item.seriesOrProject && item.seriesOrProject.toLowerCase().trim() === f) {
-          return true;
-        }
-
-        // Match category
-        if (item.category && item.category.toLowerCase().trim() === f) {
-          return true;
-        }
-
-        // Match artist
-        if (item.artist && item.artist.toLowerCase().trim() === f) {
-          return true;
-        }
-
-        // Match tags
-        if (item.tags && item.tags.some((t) => t.toLowerCase().trim() === f)) {
-          return true;
-        }
-
-        return false;
-      });
+      .filter((item) => itemMatchesFilter(item, activeFilter));
   }, [items, activeFilter]);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToastMessage(msg);
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setToastMessage(null);
     }, 3200);
-  };
+  }, []);
 
-  // Reorder handler for live Drag & Drop
-  const handleReorder = async (newFilteredItems: GalleryItem[]) => {
+  // Clean up toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
+
+  // Reorder handler for live Drag & Drop with O(N) splicing
+  const handleReorder = useCallback(async (newFilteredItems: GalleryItem[]) => {
     if (activeFilter === "all") {
       setItems(newFilteredItems);
       await syncGalleryItemsOrder(newFilteredItems);
       showToast("Live gallery order updated & synced!");
     } else {
-      // Reorder within active filter and splice back into master list
-      const nonFiltered = items.filter((i) => !newFilteredItems.some((n) => n.id === i.id));
+      const newIds = new Set(newFilteredItems.map((n) => n.id));
+      const nonFiltered = items.filter((i) => !newIds.has(i.id));
       const combined = [...newFilteredItems, ...nonFiltered];
       setItems(combined);
       await syncGalleryItemsOrder(combined);
       showToast("Category order updated & synced!");
     }
-  };
+  }, [activeFilter, items, showToast]);
 
-  const handleToggleIris = async (item: GalleryItem) => {
+  const handleToggleIris = useCallback(async (item: GalleryItem) => {
     const nextVal = !item.isIrisItem;
     await updateGalleryItem(item.id, { isIrisItem: nextVal });
     showToast(nextVal ? "Photo added to Iris Animation" : "Photo removed from Iris Animation");
-  };
+  }, [showToast]);
 
-  const handleDeleteItem = async (id: string) => {
+  const handleDeleteItem = useCallback(async (id: string) => {
     if (confirm("Are you sure you want to permanently delete this photo?")) {
       await deleteGalleryItem(id);
       showToast("Photograph deleted successfully");
     }
-  };
+  }, [showToast]);
 
-  const handleSaveEdit = async (id: string, updates: Partial<GalleryItem>) => {
+  const handleSaveEdit = useCallback(async (id: string, updates: Partial<GalleryItem>) => {
     await updateGalleryItem(id, updates);
     showToast("Photo details updated!");
     setEditingItem(null);
-  };
+  }, [showToast]);
 
-  const handleReplayIntro = () => {
+  const handleReplayIntro = useCallback(() => {
     setForceShowIntro(true);
     setIntroFinished(false);
-  };
+  }, []);
+
+  const handleOpenLightbox = useCallback((item: GalleryItem) => {
+    setSelectedLightboxItem(item);
+  }, []);
+
+  const handleCloseLightbox = useCallback(() => {
+    setSelectedLightboxItem(null);
+  }, []);
 
   return (
-    <SmoothScroll>
-      <main className="relative min-h-screen bg-[#FAF9F6] text-[#0A0A0A]">
+    <main className="relative min-h-screen bg-[#FAF9F6] text-[#0A0A0A]">
         {/* Cinematic Intro Animation on Page Load (Solid Black background, expanding iris, smooth dissolve) */}
         <IntroLoader
           forceShow={forceShowIntro}
@@ -158,55 +160,69 @@ function HomeContent() {
 
         {/* In-Situ Admin Floating Control Bar (Only rendered for authenticated admin) */}
         {isAdmin && (
-          <aside aria-label="In-situ Admin Controls" className="sticky top-0 z-50 w-full bg-[#111111] text-white border-b border-white/15 px-4 sm:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-sans shadow-2xl">
+          <aside aria-label="In-situ Admin Controls" className="sticky top-0 z-50 w-full bg-[#F4F0EA]/95 backdrop-blur-md text-[#1C1917] border-b border-[#DDD6CA] px-5 sm:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-sm font-admin shadow-xs">
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold tracking-wider text-white uppercase text-[11px]">
-                  Visual Admin Mode
-                </span>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold tracking-wider text-[#1C1917]">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <span>STUDIO ACTIVE</span>
               </div>
-              <span className="text-neutral-600 hidden sm:inline">|</span>
-              <span className="text-neutral-400 text-[11px] hidden sm:inline">
-                Drag photos on live grid to reorder
+              <span className="text-[#DDD6CA] hidden sm:inline">|</span>
+              <span className="text-stone-600 text-xs sm:text-sm hidden sm:inline">
+                Drag photos on live grid to sequence
               </span>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/admin/dashboard"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] border border-[#DDD6CA] text-xs sm:text-sm font-semibold rounded-lg transition-colors shadow-xs"
+              >
+                <Sliders className="w-3.5 h-3.5 text-stone-600" />
+                <span>Dashboard</span>
+              </Link>
+
+              <Link
+                href="/admin/guide"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] border border-[#DDD6CA] text-xs sm:text-sm font-semibold rounded-lg transition-colors shadow-xs"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-stone-600" />
+                <span>Guide</span>
+              </Link>
+
               <button
                 type="button"
                 onClick={() => setShowUploader(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-neutral-200 text-black font-bold uppercase text-[11px] tracking-wider transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-xs sm:text-sm font-semibold rounded-lg transition-colors cursor-pointer shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Upload Photo</span>
+                <span>Upload</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowIrisManager(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-white/10 font-semibold uppercase text-[11px] tracking-wider transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] border border-[#DDD6CA] text-xs sm:text-sm font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
               >
-                <Sparkles className="w-3.5 h-3.5 text-red-500" />
-                <span>Iris Animation ({items.filter((i) => i.isIrisItem).length})</span>
+                <Sparkles className="w-3.5 h-3.5 text-stone-600" />
+                <span>Iris ({items.filter((i) => i.isIrisItem).length})</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setDragEnabled(!dragEnabled)}
-                className={`px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider border transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 text-xs sm:text-sm border rounded-lg transition-colors cursor-pointer ${
                   dragEnabled
-                    ? "bg-red-950/70 text-red-300 border-red-500/50"
-                    : "bg-neutral-900 text-neutral-400 border-white/15"
+                    ? "bg-[#1C1917] text-[#FAF7F2] border-[#1C1917] font-semibold shadow-xs"
+                    : "bg-[#FAF7F2] hover:bg-[#EAE4D9] text-stone-700 border-[#DDD6CA] font-medium shadow-xs"
                 }`}
               >
-                Drag Reorder: {dragEnabled ? "ON" : "OFF"}
+                Reorder: {dragEnabled ? "ON" : "OFF"}
               </button>
 
               <button
                 type="button"
                 onClick={logout}
-                className="text-neutral-400 hover:text-red-400 text-[11px] px-2 py-1 transition-colors cursor-pointer"
+                className="text-stone-600 hover:text-[#1C1917] text-xs sm:text-sm font-semibold px-3 py-1.5 transition-colors cursor-pointer hover:bg-[#EAE4D9] rounded-lg"
               >
                 Logout
               </button>
@@ -216,7 +232,7 @@ function HomeContent() {
 
         {/* Live Toast Confirmation Notification */}
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 bg-[#141414] text-white border border-white/20 px-4 py-2.5 shadow-2xl flex items-center gap-2.5 text-xs font-sans animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="fixed bottom-6 right-6 z-50 bg-[#1C1917] text-[#FAF7F2] border border-stone-800 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-bottom-3 duration-200">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toastMessage}</span>
           </div>
@@ -234,21 +250,26 @@ function HomeContent() {
 
           {/* Right Main Gallery Area */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Filter Title Header (When filtered by specific series or category) */}
+            {/* Filter Title Header (When filtered by specific series, tag, or category) */}
             {activeFilter !== "all" && (
               <div className="px-6 sm:px-10 lg:px-14 pt-8 pb-2 flex items-baseline justify-between">
                 <div>
-                  <span className="text-[10px] sm:text-[11px] font-sans uppercase tracking-[0.22em] text-neutral-500 block mb-1">
-                    PROJECT / SERIES
+                  <span className="text-[10px] sm:text-[11px] font-sans uppercase tracking-[0.22em] text-[#78716C] block mb-1">
+                    EXHIBITION / FILTER
                   </span>
-                  <h2 className="font-sans text-xl sm:text-2xl font-medium tracking-tight text-neutral-950">
-                    {activeFilter}
+                  <h2 className="font-sans text-xl sm:text-2xl font-medium tracking-tight text-[#1C1917]">
+                    {getCategoryDisplayLabel(activeFilter)}
                   </h2>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveFilter("all")}
-                  className="text-xs text-neutral-500 hover:text-black uppercase tracking-wider underline underline-offset-4 cursor-pointer"
+                  onClick={() => {
+                    setActiveFilter("all");
+                    if (typeof window !== "undefined") {
+                      window.history.pushState(null, "", "/");
+                    }
+                  }}
+                  className="text-xs text-[#78716C] hover:text-[#1C1917] uppercase tracking-wider underline underline-offset-4 cursor-pointer"
                 >
                   Show All Work ({items.length})
                 </button>
@@ -258,31 +279,31 @@ function HomeContent() {
             {/* Raw Natural Sized Gallery Grid with In-Situ Drag & Drop */}
             <GalleryGrid
               items={filteredItems}
-              onOpenLightbox={(item) => setSelectedLightboxItem(item)}
+              onOpenLightbox={handleOpenLightbox}
               isAdmin={Boolean(isAdmin && dragEnabled)}
               onReorder={handleReorder}
               onEditItem={(item) => setEditingItem(item)}
               onDeleteItem={handleDeleteItem}
               onToggleIris={handleToggleIris}
             />
-
-            {/* Minimal Footer */}
-            <Footer />
           </div>
         </div>
+
+        {/* Full-Width & Section-Height Footer */}
+        <Footer />
 
         {/* Full-Screen Lightbox Modal */}
         <LightboxModal
           item={selectedLightboxItem}
           items={filteredItems}
-          onClose={() => setSelectedLightboxItem(null)}
-          onSelect={(item) => setSelectedLightboxItem(item)}
+          onClose={handleCloseLightbox}
+          onSelect={handleOpenLightbox}
         />
 
         {/* In-Situ Admin Upload Modal */}
         {showUploader && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto">
               <ImageUploader
                 onSuccess={() => {
                   setShowUploader(false);
@@ -316,15 +337,14 @@ function HomeContent() {
           />
         )}
       </main>
-    </SmoothScroll>
   );
 }
 
-export default function HomePage() {
+export default function HomePage({ initialFilter }: HomePageProps) {
   return (
     <AuthProvider>
       <Suspense fallback={null}>
-        <HomeContent />
+        <HomeContent initialFilter={initialFilter} />
       </Suspense>
     </AuthProvider>
   );

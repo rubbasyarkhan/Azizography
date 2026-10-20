@@ -16,33 +16,46 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-const LOCAL_STORAGE_KEY = "azizography_gallery_items_v4";
+const LOCAL_STORAGE_KEY = "azizography_gallery_items_v5";
 
-// Helper to get local items
+// In-memory cache to prevent redundant JSON.parse and sorting on every render
+let cachedItems: GalleryItem[] | null = null;
+
+// Helper to get local items with in-memory caching
 export function getLocalItems(): GalleryItem[] {
   if (typeof window === "undefined") {
     return INITIAL_GALLERY_ITEMS;
   }
+
+  if (cachedItems !== null) {
+    return cachedItems;
+  }
+
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_GALLERY_ITEMS));
-      return INITIAL_GALLERY_ITEMS;
+      cachedItems = [...INITIAL_GALLERY_ITEMS];
+      return cachedItems;
     }
     const parsed: GalleryItem[] = JSON.parse(raw);
-    return parsed.sort((a, b) => a.orderIndex - b.orderIndex);
+    parsed.sort((a, b) => a.orderIndex - b.orderIndex);
+    cachedItems = parsed;
+    return cachedItems;
   } catch (err) {
     console.error("Error reading local gallery items:", err);
-    return INITIAL_GALLERY_ITEMS;
+    cachedItems = [...INITIAL_GALLERY_ITEMS];
+    return cachedItems;
   }
 }
 
-// Helper to save local items
+// Helper to save local items and update cache
 export function saveLocalItems(items: GalleryItem[]): void {
+  cachedItems = items;
   if (typeof window === "undefined") return;
+
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-    // Dispatch custom event to notify components across tabs/pages
     window.dispatchEvent(new CustomEvent("azizography_gallery_update", { detail: items }));
   } catch (err) {
     console.error("Error saving local gallery items:", err);
@@ -56,19 +69,14 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
       const q = query(collection(db, "gallery_items"), orderBy("orderIndex", "asc"));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        return snapshot.docs.map((docSnap) => ({
+        const items = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         })) as GalleryItem[];
+        saveLocalItems(items);
+        return items;
       }
-      // If Firestore collection is empty, seed it with default items!
-      const batch = writeBatch(db);
-      for (const item of INITIAL_GALLERY_ITEMS) {
-        const itemRef = doc(db, "gallery_items", item.id);
-        batch.set(itemRef, item);
-      }
-      await batch.commit();
-      return INITIAL_GALLERY_ITEMS;
+      return [];
     } catch (err) {
       console.warn("Firestore fetch failed, falling back to local storage:", err);
       return getLocalItems();
@@ -78,7 +86,7 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
   return getLocalItems();
 }
 
-// Subscribe to real-time updates
+// Subscribe to real-time updates with optimized memory cleanup
 export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void): () => void {
   if (typeof window === "undefined") {
     return () => {};
@@ -88,6 +96,7 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
 
   // Local storage listener
   const handler = () => {
+    cachedItems = null; // Invalidate cache on external storage event
     callback(getLocalItems());
   };
   window.addEventListener("azizography_gallery_update", handler);
@@ -107,14 +116,13 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
               id: d.id,
               ...d.data(),
             })) as GalleryItem[];
+            saveLocalItems(items);
             callback(items);
           } else {
             callback(getLocalItems());
           }
         },
         (error) => {
-          // If Firestore security rules have not been deployed in Firebase Console yet,
-          // notify cleanly and continue operating smoothly in local mode.
           console.info(
             "Firestore rules pending deployment in Firebase Console. Operating in local sync mode.",
             error.message
@@ -149,9 +157,23 @@ export function subscribeToIrisItems(callback: (items: GalleryItem[]) => void): 
   });
 }
 
-// Update multiple items order and/or category (Jira/Clickup style Drag and drop)
+// Helper to get only Footer Trail items (curated by admin)
+export function getFooterTrailItems(): GalleryItem[] {
+  const items = getLocalItems();
+  const trail = items.filter((i) => i.isFooterTrailItem && i.isVisible !== false);
+  return trail.length > 0 ? trail : items.filter((i) => i.isVisible !== false);
+}
+
+// Subscribe to Footer Trail items
+export function subscribeToFooterTrailItems(callback: (items: GalleryItem[]) => void): () => void {
+  return subscribeToGalleryItems((items) => {
+    const trail = items.filter((i) => i.isFooterTrailItem && i.isVisible !== false);
+    callback(trail.length > 0 ? trail : items.filter((i) => i.isVisible !== false));
+  });
+}
+
+// Update multiple items order
 export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void> {
-  // Update orderIndex according to array index
   const normalizedItems = items.map((item, index) => ({
     ...item,
     orderIndex: index,
@@ -173,12 +195,10 @@ export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void>
   }
 }
 
-// Upload file to Firebase Storage (or convert to base64 if running locally / storage not enabled)
-// Automatically converts any format (PNG, JPEG, HEIC, TIFF) into compressed WebP format
+// Upload file to Firebase Storage (or convert to WebP data URL fallback)
 export async function uploadImageFile(
   file: File
 ): Promise<{ imageUrl: string; storagePath: string; width?: number; height?: number }> {
-  // First, convert any file format to compressed WebP (max 1920px, quality 0.82)
   let processedFile = file;
   let webpDataUrl = "";
   let dimensions: { width?: number; height?: number } = {};
@@ -248,7 +268,7 @@ export async function createGalleryItem(
   const newItem: GalleryItem = {
     ...itemData,
     id: newId,
-    orderIndex: currentItems.length,
+    orderIndex: 0, // Put new item at top
     createdAt: new Date().toISOString(),
   };
 
@@ -262,13 +282,13 @@ export async function createGalleryItem(
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", newId);
-      await setDoc(docRef, newItem);
+      await setDoc(docRef, updatedItems[0]);
     } catch (err) {
       console.warn("Firestore document write pending rules authorization. Item saved in local storage:", err);
     }
   }
 
-  return newItem;
+  return updatedItems[0];
 }
 
 // Update specific gallery item
@@ -295,7 +315,9 @@ export async function updateGalleryItem(
 // Delete gallery item
 export async function deleteGalleryItem(id: string): Promise<void> {
   const currentItems = getLocalItems();
-  const updatedItems = currentItems.filter((item) => item.id !== id);
+  const updatedItems = currentItems
+    .filter((item) => item.id !== id)
+    .map((item, idx) => ({ ...item, orderIndex: idx }));
   saveLocalItems(updatedItems);
 
   if (isFirebaseConfigured && db) {
@@ -315,10 +337,8 @@ export async function resetToDefaultSeed(): Promise<void> {
   if (isFirebaseConfigured && db) {
     try {
       const batch = writeBatch(db);
-      // Delete existing
       const existing = await getDocs(collection(db, "gallery_items"));
       existing.forEach((d) => batch.delete(d.ref));
-      // Re-add defaults
       for (const item of INITIAL_GALLERY_ITEMS) {
         batch.set(doc(db, "gallery_items", item.id), item);
       }

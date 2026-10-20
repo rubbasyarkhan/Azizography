@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { GalleryItem } from "@/types/gallery";
 import {
@@ -21,8 +21,7 @@ import {
   Plus,
   Play,
   Loader2,
-  Image as ImageIcon,
-  CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 
 interface IrisManagerModalProps {
@@ -50,9 +49,29 @@ export default function IrisManagerModal({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const lenis = (window as unknown as { __lenis?: { stop: () => void; start: () => void } }).__lenis;
+    lenis?.stop();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      lenis?.start();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
   const irisItems = items.filter((i) => i.isIrisItem);
-  const displayedItems =
-    filter === "iris-only" ? irisItems : items;
+  const displayedItems = filter === "iris-only" ? irisItems : items;
 
   const handleToggleIris = async (item: GalleryItem) => {
     const nextVal = !item.isIrisItem;
@@ -118,107 +137,112 @@ export default function IrisManagerModal({
 
       await createGalleryItem({
         title: newTitle.trim(),
-        seriesOrProject: newSeries.trim() || "Iris Exhibition",
+        seriesOrProject: newSeries.trim() || "Iris Collection",
         category: "people",
         imageUrl: finalUrl,
         storagePath,
         width: itemWidth,
         height: itemHeight,
-        blurDataUrl: conversionStats?.blurDataUrl,
-        isFeatured: true,
-        isVisible: true,
-        isIrisItem: true, // Automatically active in Iris!
         aspectRatio: "portrait",
+        isIrisItem: true,
+        isVisible: true,
+        isFeatured: false,
       });
 
-      // Reset form
+      // Reset
+      setShowUploadForm(false);
       setNewTitle("");
       setNewSeries("");
       setSelectedFile(null);
       setPreviewUrl(null);
       setConversionStats(null);
       setExternalUrl("");
-      setShowUploadForm(false);
     } catch (err: unknown) {
       const e = err as Error;
-      setError(e.message || "Failed to upload image.");
+      setError(e.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none">
-      <div className="bg-[#111111] border border-white/20 w-full max-w-4xl max-h-[90vh] flex flex-col font-sans text-xs text-neutral-200 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-black/40">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20 text-white">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h2 className="font-sans font-bold text-base sm:text-lg text-white uppercase tracking-wider">
-                Iris Loading Animation Photos
-              </h2>
-              <p className="text-[11px] text-neutral-400">
-                {irisItems.length} photos active in circular iris loading sequence
-              </p>
-            </div>
+    <div
+      data-lenis-prevent="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-admin"
+    >
+      <div
+        data-lenis-prevent="true"
+        className="bg-[#FAF7F2] border border-[#DDD6CA] text-[#1C1917] max-w-4xl w-full max-h-[92vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+      >
+        {/* Top Header */}
+        <div className="p-6 sm:p-7 border-b border-[#DDD6CA] flex items-center justify-between">
+          <div>
+            <h3 className="text-xl sm:text-2xl font-bold text-[#1C1917] tracking-tight">
+              Iris Opening Aperture
+            </h3>
+            <p className="text-sm text-stone-600 mt-1">
+              Select portraits that revolve in the 24-blade camera aperture on initial visitor load
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onPreviewIris}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-black font-semibold text-[11px] uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] text-sm font-semibold transition-colors border border-[#DDD6CA] rounded-lg cursor-pointer shadow-xs"
             >
-              <Play className="w-3.5 h-3.5 fill-black" />
+              <Play className="w-3.5 h-3.5 fill-current" />
               <span>Preview Animation</span>
             </button>
+
             <button
-              type="button"
               onClick={onClose}
-              className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white transition-colors cursor-pointer"
+              type="button"
+              aria-label="Close"
+              className="p-2 text-stone-500 hover:text-[#1C1917] hover:bg-[#EAE4D9] rounded-lg transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Toolbar & Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-white/10 bg-neutral-900/40">
+        {/* Filter Toolbar & Actions */}
+        <div className="px-6 py-3 bg-[#F4F0EA] border-b border-[#DDD6CA] flex flex-wrap items-center justify-between gap-3 text-sm">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setFilter("iris-only")}
-              className={`px-3 py-1 text-[11px] uppercase tracking-wider transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
                 filter === "iris-only"
-                  ? "bg-white text-black font-bold"
-                  : "bg-white/5 text-neutral-400 hover:text-white"
+                  ? "bg-[#1C1917] text-[#FAF7F2] shadow-xs"
+                  : "text-stone-600 hover:text-[#1C1917] hover:bg-[#EAE4D9]"
               }`}
             >
-              Iris Active ({irisItems.length})
+              Active in Iris ({irisItems.length})
             </button>
             <button
               type="button"
               onClick={() => setFilter("all")}
-              className={`px-3 py-1 text-[11px] uppercase tracking-wider transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
                 filter === "all"
-                  ? "bg-white text-black font-bold"
-                  : "bg-white/5 text-neutral-400 hover:text-white"
+                  ? "bg-[#1C1917] text-[#FAF7F2] shadow-xs"
+                  : "text-stone-600 hover:text-[#1C1917] hover:bg-[#EAE4D9]"
               }`}
             >
-              All Portfolio Photos ({items.length})
+              All Works ({items.length})
             </button>
           </div>
 
           <button
             type="button"
             onClick={() => setShowUploadForm(!showUploadForm)}
-            className="flex items-center gap-1.5 px-3 py-1 text-[11px] bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wider transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm font-semibold transition-colors cursor-pointer rounded-lg shadow-sm"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{showUploadForm ? "Close Uploader" : "Upload New Iris Photo"}</span>
+            <Plus className="w-4 h-4" />
+            <span>{showUploadForm ? "Close Form" : "Upload Dedicated Portrait"}</span>
           </button>
         </div>
 
@@ -226,25 +250,23 @@ export default function IrisManagerModal({
         {showUploadForm && (
           <form
             onSubmit={handleUploadSubmit}
-            className="p-5 border-b border-white/10 bg-neutral-950 space-y-4"
+            className="p-5 border-b border-[#DDD6CA] bg-[#F4F0EA]/70 space-y-4"
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-white font-bold uppercase tracking-wider">
-                Upload New Photograph for Iris Animation
-              </span>
-            </div>
+            <span className="text-sm font-bold text-[#1C1917] block">
+              Quick Ingest for Iris Aperture
+            </span>
 
             {error && (
-              <p className="text-red-400 text-[11px] bg-red-950/40 p-2 border border-red-500/30">
+              <p className="text-red-700 text-sm font-medium bg-red-50 p-3 border border-red-200 rounded-lg">
                 {error}
               </p>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                    Title
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Photograph Title *
                   </label>
                   <input
                     required
@@ -252,31 +274,31 @@ export default function IrisManagerModal({
                     placeholder="e.g. Backstage Session"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs uppercase focus:outline-none focus:border-white"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3.5 py-2 text-[#1C1917] text-sm focus:outline-none focus:border-[#1C1917] rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                    Series / Project Name
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Series / Project
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Netflix x The Four Seasons"
+                    placeholder="e.g. Marie Claire Cover"
                     value={newSeries}
                     onChange={(e) => setNewSeries(e.target.value)}
-                    className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs focus:outline-none focus:border-white"
+                    className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3.5 py-2 text-[#1C1917] text-sm focus:outline-none focus:border-[#1C1917] rounded-lg"
                   />
                 </div>
               </div>
 
               <div className="space-y-3 md:col-span-2">
-                <label className="block text-[10px] uppercase text-neutral-400 tracking-wider mb-1">
-                  Photo File or URL
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Image File (Auto WebP 82%)
                 </label>
                 <div className="flex gap-3">
                   <div
                     onClick={() => !converting && fileInputRef.current?.click()}
-                    className="flex-1 border border-dashed border-white/20 hover:border-white p-3 text-center cursor-pointer flex flex-col items-center justify-center min-h-[90px] bg-neutral-900/50"
+                    className="flex-1 border-2 border-dashed border-[#DDD6CA] hover:border-[#1C1917] p-3.5 text-center cursor-pointer flex flex-col items-center justify-center min-h-[80px] bg-[#FAF7F2] rounded-lg transition-colors"
                   >
                     <input
                       ref={fileInputRef}
@@ -288,151 +310,115 @@ export default function IrisManagerModal({
                       className="hidden"
                     />
                     {converting ? (
-                      <div className="flex flex-col items-center gap-1.5 py-1">
-                        <Loader2 className="w-4 h-4 text-red-500 animate-spin" />
-                        <span className="text-[10px] text-neutral-300 font-mono">
-                          Converting to WebP...
-                        </span>
+                      <div className="flex items-center gap-2 text-sm text-stone-700">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#1C1917]" />
+                        <span>Converting to WebP...</span>
                       </div>
                     ) : previewUrl ? (
                       <div className="flex flex-col items-center text-center gap-1">
-                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[10px] uppercase">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>WebP Ready</span>
-                        </div>
-                        {conversionStats ? (
-                          <div className="text-[9px] text-neutral-400 font-mono">
-                            <span>{formatBytes(conversionStats.originalSize)}</span>
-                            <span className="text-emerald-400 font-bold"> → {formatBytes(conversionStats.compressedSize)}</span>
-                            <span className="text-emerald-400"> (-{conversionStats.compressionRatio}%)</span>
-                          </div>
-                        ) : (
-                          <span className="text-white text-[11px] truncate max-w-[150px]">
-                            {selectedFile?.name}
+                        <span className="text-[#1C1917] text-sm font-semibold truncate max-w-[180px]">
+                          {selectedFile?.name}
+                        </span>
+                        {conversionStats && (
+                          <span className="text-xs text-stone-500 font-mono">
+                            {formatBytes(conversionStats.compressedSize)} (-{conversionStats.compressionRatio}%)
                           </span>
                         )}
                       </div>
                     ) : (
-                      <>
-                        <Upload className="w-4 h-4 text-neutral-400 mb-1" />
-                        <span className="text-[10px] text-neutral-400 uppercase tracking-wider">
-                          Upload file (Auto WebP & compress)
-                        </span>
-                      </>
+                      <span className="text-sm font-medium text-stone-600">
+                        Choose file (auto WebP 82%)
+                      </span>
                     )}
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-between">
-                    <input
-                      type="url"
-                      placeholder="Or paste image URL (Unsplash/CDN)..."
-                      value={externalUrl}
-                      onChange={(e) => {
-                        setExternalUrl(e.target.value);
-                        if (e.target.value) setSelectedFile(null);
-                      }}
-                      className="w-full bg-[#181818] border border-white/10 px-3 py-2 text-white text-xs focus:outline-none focus:border-white"
-                    />
-                    <button
-                      type="submit"
-                      disabled={uploading}
-                      className="w-full mt-2 py-2 bg-white hover:bg-neutral-200 text-black font-bold uppercase text-[11px] tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      {uploading ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Ingesting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Add to Iris</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={uploading || converting || (!selectedFile && !externalUrl)}
+                    className="px-5 py-2 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer rounded-lg shrink-0 self-end shadow-sm"
+                  >
+                    {uploading ? "Saving..." : "Add to Iris"}
+                  </button>
                 </div>
               </div>
             </div>
           </form>
         )}
 
-        {/* Photos Grid */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {displayedItems.map((item) => {
-              const active = Boolean(item.isIrisItem);
-              return (
+        {/* Scrollable Photos Grid */}
+        <div
+          data-lenis-prevent="true"
+          onWheel={(e) => e.stopPropagation()}
+          className="flex-1 overflow-y-auto overscroll-contain p-6 sm:p-7"
+        >
+          {displayedItems.length === 0 ? (
+            <div className="py-20 text-center border-2 border-dashed border-[#DDD6CA] rounded-xl">
+              <p className="text-sm font-medium text-stone-500">
+                {filter === "iris-only"
+                  ? "No photographs active in Iris ring"
+                  : "No photographs found in archive"}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
+              {displayedItems.map((item) => (
                 <div
                   key={item.id}
-                  className={`group relative flex flex-col border transition-all ${
-                    active
-                      ? "border-white/50 bg-white/[0.05]"
-                      : "border-white/10 bg-black/40 opacity-60 hover:opacity-100"
+                  onClick={() => handleToggleIris(item)}
+                  className={`group relative aspect-[3/4] bg-stone-950 transition-all cursor-pointer overflow-hidden rounded-xl ${
+                    item.isIrisItem
+                      ? "border-2 border-[#1C1917] shadow-md ring-2 ring-stone-900/10"
+                      : "border border-[#DDD6CA] opacity-60 hover:opacity-100 hover:border-stone-400"
                   }`}
                 >
-                  {/* Photo thumbnail */}
-                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
-                    <Image
-                      src={item.imageUrl}
-                      alt={item.title}
-                      fill
-                      sizes="160px"
-                      className="object-cover"
-                    />
-                    {active && (
-                      <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-red-600 text-white font-mono text-[9px] uppercase tracking-wider font-bold">
-                        Iris
-                      </div>
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.title}
+                    fill
+                    sizes="180px"
+                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+
+                  {/* Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+
+                  {/* Iris Indicator Badge */}
+                  <div className="absolute top-2 right-2">
+                    {item.isIrisItem ? (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-[#1C1917] text-[#FAF7F2] text-xs font-semibold rounded shadow">
+                        <Check className="w-3 h-3" />
+                        <span>Iris</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-[#FAF7F2]/90 text-[#1C1917] text-xs font-semibold rounded group-hover:bg-[#FAF7F2] transition-colors shadow">
+                        <Plus className="w-3 h-3" />
+                        <span>Add</span>
+                      </span>
                     )}
                   </div>
 
-                  {/* Caption & Toggle Button */}
-                  <div className="p-2 flex flex-col justify-between flex-1 gap-2">
-                    <div className="truncate">
-                      <p className="text-[11px] text-white font-medium truncate uppercase">
-                        {item.title}
-                      </p>
-                      {item.seriesOrProject && (
-                        <p className="text-[9px] text-neutral-400 truncate">
-                          {item.seriesOrProject}
-                        </p>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleToggleIris(item)}
-                      className={`w-full py-1 text-[10px] uppercase font-bold tracking-wider transition-colors cursor-pointer ${
-                        active
-                          ? "bg-red-950/60 text-red-300 hover:bg-red-900/60 border border-red-500/30"
-                          : "bg-white/10 text-white hover:bg-white/20 border border-white/20"
-                      }`}
-                    >
-                      {active ? "Remove" : "+ Add to Iris"}
-                    </button>
+                  {/* Caption */}
+                  <div className="absolute bottom-2 left-2 right-2 truncate">
+                    <p className="text-xs sm:text-sm font-semibold text-white truncate drop-shadow-sm">
+                      {item.title}
+                    </p>
+                    <p className="text-[11px] text-stone-300 capitalize truncate drop-shadow-sm">
+                      {item.category}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {displayedItems.length === 0 && (
-            <div className="py-20 text-center text-neutral-500 font-mono text-xs uppercase">
-              No photos currently selected. Click &quot;All Portfolio Photos&quot; to add photos to Iris.
+              ))}
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-white/10 flex items-center justify-between bg-black/40 text-[11px] text-neutral-400">
-          <span>
-            {irisItems.length} photos active • Iris animates smoothly using these curated images
-          </span>
+        {/* Footer Info */}
+        <div className="p-4 sm:p-5 bg-[#F4F0EA] border-t border-[#DDD6CA] flex items-center justify-between text-sm text-stone-600 font-medium">
+          <span>{irisItems.length} active in Iris ring</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 bg-white text-black font-semibold uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
+            className="px-5 py-2 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm font-semibold transition-colors cursor-pointer rounded-lg shadow-sm"
           >
             Done
           </button>

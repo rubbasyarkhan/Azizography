@@ -1,102 +1,114 @@
-# AZIZOGRAPHY // Next.js Photographer Portfolio & Drag-and-Drop Admin Portal
+# AZIZOGRAPHY // Editorial, Concert & Tour Photography Archive
 
-A full-stack, high-performance photographer portfolio built for a world-touring concert, singer spotlight, and editorial wedding photographer.
+A modern, high-performance photographer portfolio and curator studio built with Next.js 16, React 19, Tailwind CSS, Lenis momentum smooth scrolling, and Firebase Firestore / Cloud Storage.
 
-Inspired by:
-- **Hero & Live Archive Layout:** [Deanie Chen Live](https://deaniechen.com/live)
-- **Cinematic Loading Sequence:** [Hollywood Exhibit 2026](https://www.hollywoodexhibit2026.com/)
+Designed for live arena tours, vocalist spotlights, high-fashion editorial commissions, and cinematic portrait archives.
 
 ---
 
-## ⚡ Tech Stack & Architecture
+## Architecture & Tech Stack
 
-- **Framework:** Next.js (App Router, React 19, TypeScript)
-- **Styling & Design System:** Tailwind CSS
-- **Animations:** GSAP & Framer Motion (Kinetic Typography, Curtain Reveal, Split-Text)
-- **Smooth Momentum Scrolling:** Lenis
-- **Drag-and-Drop Engine:** `@dnd-kit` (Jira/ClickUp Kanban & Layout Grid Controller)
-- **Database & Storage:** Firebase (Authentication, Firestore Database, Cloud Storage)
+- **Framework:** Next.js (App Router, React 19, TypeScript, Turbopack)
+- **Styling:** Tailwind CSS with custom editorial typography scales
+- **Smooth Momentum Scrolling:** Lenis with nested scroll container prevention (`[data-lenis-prevent]`)
+- **Drag-and-Drop Sequencing:** `@dnd-kit` (Grid & Category Kanban curation boards)
+- **Database & Storage:** Firebase Firestore Database & Firebase Cloud Storage
+- **Client-Side Optimization:** Canvas-based automatic WebP compression (80–90% file size reduction before upload)
 - **Typography:**
-  - Display: **Syne** & **Space Grotesk**
-  - Refined Serif: **Cormorant Garamond** & **Cinzel**
-  - Body: **Inter**
+  - Display & Headlines: **Playfair Display**, **Syne**, **Cinzel**
+  - Refined Serif & Editorial: **Cormorant Garamond**
+  - Monospace & System UI: **Space Grotesk**, **Inter**
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-### 1. Cinematic Intro Animation (`/` & `/live`)
-- Full-viewport intro sequence inspired by **Hollywood Exhibit 2026**.
-- Kinetic typography, audio toggle, and dynamic percentage counter (00% → 100%).
-- GSAP dual-curtain split reveal transitioning directly into the Hero showcase without page refresh.
-- `sessionStorage` persistence ensures returning visitors in the same session bypass the intro unless manually replayed using the **"Intro"** header button.
-- Keyboard shortcut: Press `ESC` to skip intro instantly.
+### 1. Interactive Editorial Archive & Gallery
+- **Dynamic Masonry Grid:** Responsive columns adapting smoothly from mobile phones to ultra-wide displays.
+- **Categorized Exhibitions:** Filter dynamically by **Portraits & People**, **Live & Concerts**, **Vocalists & Singers**, **Weddings & Ceremonies**, and **Festivals & Events**.
+- **Live Search & Tags:** Real-time text search indexing photograph titles, series, artist names, captions, locations, and EXIF tags.
+- **Instagram Post Integration:** Photographs can feature direct links to live Instagram posts or reels. Visitors can click **"View and comment on Instagram ↗"** directly from image captions, desktop hover overlays, or within the full lightbox.
 
-### 2. Live Portfolio Showcase (`/` & `/live`)
-- Colossal brutalist typography (`LIVE.`), tour marquee ticker, and live show statistics.
-- Dynamic modular masonry grid populated in real-time from Firestore.
-- Image sequence strictly governed by the Admin's configured `orderIndex`.
-- Filter by category: **Concerts**, **Singers**, **Weddings**, **Events** with dynamic count badges and live search by artist, title, or venue.
-- Full-screen **Lightbox Modal** displaying high-resolution imagery and EXIF metadata (Body, Lens, ISO, Aperture, Shutter Speed, Location, Year, Visual Tags).
-- Photographer Bio, Tour Rig breakdown, and interactive **Booking Inquiry Form**.
+### 2. Full-Screen Interactive Lightbox & Carousel
+- Zero-latency hero preview transitioning into an interactive WebGL liquid carousel.
+- Full gestures, drag momentum, and mouse-wheel navigation.
+- Floating metadata and direct jump to Instagram comments in a new tab.
+- Accessible keyboard controls (<kbd>ESC</kbd> to close, arrow keys for navigation).
 
-### 3. Dynamic Drag-and-Drop Admin Portal (`/admin` & `/admin/dashboard`)
-- **Authentication:**
-  - Secure login page with Auth Guard.
-  - **Default Credentials:**
-    - **Email:** `admin@azizograhy.com`
-    - **Password:** `azizography123`
-  - Quick **"Click to auto-fill"** helper button for instant testing.
-- **Image Uploader Dropzone:**
-  - Drag-and-drop file upload with live preview.
-  - Direct upload to Firebase Cloud Storage (or optimized base64 local storage).
-  - Metadata indexing: Title, Category, Aspect Ratio (Portrait, Tall, Landscape, Square), Artist, Location, Year, EXIF, and Tags.
-- **Canvas Controller (`DndBoard`):**
-  - **Layout Grid Mode:** Visual sequencing where cards are dragged to dictate exact public display order.
-  - **Jira / ClickUp Kanban Mode:** 4-column board categorized by Concerts, Singers, Weddings, and Events.
-  - **Real-Time Sync:** Dragging cards immediately updates `orderIndex` and `category` across the live database and public site.
-  - **Card Quick Actions:**
-    - Toggle Visibility (`Eye` / `EyeOff` to hide/show from public gallery)
-    - Toggle Featured status (`Star` badge)
-    - Edit Metadata Drawer (modify title, location, EXIF without re-uploading)
-    - Delete asset with confirmation
-    - Confetti celebration upon saving reordered cards.
-  - **Reset to Defaults:** Restore original 12 curated exhibition photos at any time.
+### 3. Selected Clients & Interactive Hover Cursor
+- **2-in-a-Row Grid:** Clean two-column editorial layout for publication and brand commissions.
+- **Interactive Cursor Follower:** On desktop, hovering over any publication row reveals a floating photograph that follows the mouse cursor, dynamically cross-fading when moving between clients.
+- **Touch-Friendly Fallback:** On mobile and tablet screens, clean inline thumbnails render so touch screen users see the imagery seamlessly.
+
+### 4. 24-Blade Iris Aperture Intro Loader
+- Mathematical 24-blade camera aperture opening sequence revolving through curated portraits upon first visitor load.
+- Persisted session storage so returning visitors bypass the animation unless manually replayed.
+
+### 5. Interactive Mouse Trail
+- Velocity-based mouse trail displaying curated photography on cursor movement.
+
+### 6. Curator Admin Portal (`/admin` & `/admin/dashboard`)
+- **Authentication Guard:** Secure session authentication using environment-configured administrator credentials or live Firebase Auth.
+- **Drag-and-Drop Exhibition Sequencing:** Live reordering via `@dnd-kit` immediately synchronizes display sequence to Firestore and local storage.
+- **Client-Side WebP Image Compression:** Automatic compression and conversion of uploaded JPEG/PNG/HEIC files to high-efficiency WebP with compression ratio telemetry.
+- **Dedicated About Page Editor:** Modal editor to upload photographer portraits, update hero statements, and manage client publication roster and hover preview photos.
+- **Dedicated Iris Aperture Manager:** Visual selector to curate portraits active in the opening aperture animation.
 
 ---
 
-## 🛠️ Quick Start
+## Environment Configuration
 
-### 1. Install & Run Dev Server
+Create a `.env.local` file in the project root based on `.env.example`:
+
+```bash
+cp .env.example .env.local
+```
+
+### Environment Variables Reference
+
+| Variable | Description |
+| :--- | :--- |
+| `NEXT_PUBLIC_ADMIN_EMAIL` | Administrator login email address for the curator studio |
+| `NEXT_PUBLIC_ADMIN_PASSWORD` | Administrator login password |
+| `CONTACT_EMAIL` | Destination email address where contact inquiries are delivered |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Public contact inquiry address displayed on the contact page |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | *(Optional)* Firebase Web API Key |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | *(Optional)* Firebase Auth Domain (`your-app.firebaseapp.com`) |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | *(Optional)* Firebase Project ID |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | *(Optional)* Firebase Cloud Storage Bucket |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | *(Optional)* Firebase Cloud Messaging Sender ID |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | *(Optional)* Firebase Web App ID |
+| `NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE` | Set to `true` when Firebase Cloud Storage bucket is initialized |
+
+> **Note:** Azizography runs out-of-the-box in offline/local mode if Firebase keys are omitted. When Firebase keys are provided, it automatically connects to live Firestore and Cloud Storage.
+
+---
+
+## Getting Started
+
+### 1. Install Dependencies
+
 ```bash
 npm install
+```
+
+### 2. Start Development Server
+
+```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the live portfolio.
 
-### 2. Access Admin Portal
-Navigate to [http://localhost:3000/admin](http://localhost:3000/admin):
-- **Email:** `admin@azizograhy.com`
-- **Password:** `azizography123`
+Visit [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 3. Build for Production
+
+```bash
+npm run build
+npm run start
+```
 
 ---
 
-## ☁️ Connecting Live Firebase (Optional)
+## License
 
-Azizography works out of the box with zero setup in **Demo Mode**. To link your live Firebase project, create a `.env.local` file with:
-
-```env
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-
-NEXT_PUBLIC_ADMIN_EMAIL=admin@azizograhy.com
-```
-
-In the Firebase Console:
-1. **Authentication:** Enable Email/Password provider and add `admin@azizograhy.com`.
-2. **Firestore Database:** Create database in test mode or with security rules.
-3. **Cloud Storage:** Enable Storage bucket for `gallery/*`.
+Private portfolio archive for Azizography. All photography rights reserved by the respective artist.

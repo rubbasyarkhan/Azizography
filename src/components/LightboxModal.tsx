@@ -4,7 +4,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import { GalleryItem } from "@/types/gallery";
 import { getOptimizedImageUrl } from "@/lib/image-utils";
 import FlexCarousel from "./FlexCarousel";
-import { X } from "lucide-react";
+import { X, ArrowUpRight } from "lucide-react";
+import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface LightboxModalProps {
   item: GalleryItem | null;
@@ -31,11 +32,22 @@ export default function LightboxModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  // Reset ready state when modal closes
   useEffect(() => {
     if (!item) {
       setCarouselReady(false);
+      return;
     }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const lenis = (window as unknown as { __lenis?: { stop: () => void; start: () => void } }).__lenis;
+    lenis?.stop();
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      lenis?.start();
+    };
   }, [item]);
 
   const initialIndex = useMemo(() => {
@@ -62,7 +74,7 @@ export default function LightboxModal({
         src: getOptimizedImageUrl(itm.imageUrl, 1200, 78),
         alt: itm.title,
         title: itm.title,
-        subtitle: itm.seriesOrProject || itm.artist || itm.location || "",
+        subtitle: itm.description || itm.seriesOrProject || itm.artist || itm.location || "",
         aspect,
         width: itm.width || (aspect > 1 ? 1600 : 1200),
         height: itm.height || (aspect > 1 ? 1067 : 1600),
@@ -73,7 +85,10 @@ export default function LightboxModal({
   if (!item) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#070707]/98 backdrop-blur-2xl select-none animate-in fade-in duration-150">
+    <div
+      data-lenis-prevent="true"
+      className="fixed inset-0 z-50 flex flex-col bg-[#070707]/98 backdrop-blur-2xl select-none animate-in fade-in duration-150"
+    >
       {/* Sleek Minimal Top Bar */}
       <div className="relative z-40 w-full px-6 py-4 flex items-center justify-between border-b border-white/[0.08] bg-black/40">
         <div className="flex items-center gap-3">
@@ -87,10 +102,24 @@ export default function LightboxModal({
         </div>
 
         <div className="flex items-center gap-3">
+          {item.instagramUrl && (
+            <a
+              href={item.instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-600/80 to-purple-600/80 hover:from-pink-500 hover:to-purple-500 text-white font-syne text-[11px] uppercase tracking-wider font-semibold transition-all cursor-pointer rounded border border-white/20 shadow-xs"
+            >
+              <InstagramIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">View and comment on Instagram</span>
+              <span className="sm:hidden">Instagram</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </a>
+          )}
+
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white text-white hover:text-black font-syne text-[11px] uppercase tracking-widest font-semibold transition-all cursor-pointer border border-white/20"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white text-white hover:text-black font-syne text-[11px] uppercase tracking-widest font-semibold transition-all cursor-pointer border border-white/20 rounded"
           >
             <X className="w-4 h-4" />
             <span>CLOSE [ESC]</span>
@@ -119,10 +148,24 @@ export default function LightboxModal({
               <h2 className="font-artistic text-xl sm:text-2xl italic text-white/95 font-normal tracking-wide">
                 {item.title}
               </h2>
-              {(item.seriesOrProject || item.artist) && (
+              {(item.seriesOrProject || item.description || item.artist) && (
                 <p className="font-syne text-[11px] uppercase tracking-[0.22em] text-neutral-400 mt-1">
-                  {item.seriesOrProject || item.artist}
+                  {item.seriesOrProject || item.description || item.artist}
                 </p>
+              )}
+              {item.instagramUrl && (
+                <div className="mt-2.5">
+                  <a
+                    href={item.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-sans text-pink-300 hover:text-white underline underline-offset-4"
+                  >
+                    <InstagramIcon className="w-3.5 h-3.5 text-pink-400" />
+                    <span>View and comment on Instagram</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
               )}
             </div>
           </div>
@@ -155,6 +198,36 @@ export default function LightboxModal({
             }}
           />
         </div>
+      </div>
+
+      {/* Sleek Floating Bottom Details Bar */}
+      <div className="relative z-40 w-full px-6 py-3 border-t border-white/[0.08] bg-black/60 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-3">
+          <span className="font-artistic italic text-white text-base sm:text-lg truncate">
+            {item.title}
+          </span>
+          {(item.seriesOrProject || item.description) && (
+            <>
+              <span className="text-neutral-600 hidden sm:inline">•</span>
+              <span className="font-syne text-[11px] uppercase tracking-widest text-neutral-400 hidden sm:inline truncate max-w-md">
+                {item.seriesOrProject || item.description}
+              </span>
+            </>
+          )}
+        </div>
+
+        {item.instagramUrl && (
+          <a
+            href={item.instagramUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-sans text-pink-300 hover:text-white font-medium group/insta transition-colors"
+          >
+            <InstagramIcon className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+            <span className="underline underline-offset-4">View and comment on Instagram</span>
+            <ArrowUpRight className="w-3.5 h-3.5 group-hover/insta:translate-x-0.5 group-hover/insta:-translate-y-0.5 transition-transform" />
+          </a>
+        )}
       </div>
     </div>
   );

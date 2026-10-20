@@ -1,0 +1,39 @@
+.image-trail-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.image-trail__img {
+  width: var(--trail-size, 240px);
+  aspect-ratio: var(--trail-aspect, 1.2);
+  border-radius: var(--trail-radius, 14px);
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform, opacity;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.14);
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.image-trail__img-inner {
+  background-position: 50% 50%;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: inherit;
+}
