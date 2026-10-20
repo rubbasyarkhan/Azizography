@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 
-const TARGET_EMAIL = "azizfaiq18@gmail.com";
+const TARGET_EMAIL = process.env.CONTACT_EMAIL || process.env.NEXT_PUBLIC_CONTACT_EMAIL || "azizfaiq18@gmail.com";
 
 export async function POST(request: Request) {
   try {
