@@ -122,11 +122,14 @@ function HomeContent({ initialFilter }: HomePageProps) {
   }, [showToast]);
 
   const handleDeleteItem = useCallback(async (id: string) => {
-    if (confirm("Are you sure you want to permanently delete this photo?")) {
-      await deleteGalleryItem(id);
-      showToast("Photograph deleted successfully");
+    const itemToDelete = items.find((i) => i.id === id);
+    const itemTitle = itemToDelete?.title || "this photograph";
+    if (confirm(`Permanently delete "${itemTitle}"? This will remove the photograph and its media files.`)) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      await deleteGalleryItem(id, itemToDelete);
+      showToast("Photograph permanently deleted");
     }
-  }, [showToast]);
+  }, [items, showToast]);
 
   const handleSaveEdit = useCallback(async (id: string, updates: Partial<GalleryItem>) => {
     await updateGalleryItem(id, updates);

@@ -14,12 +14,46 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 const LOCAL_STORAGE_KEY = "azizography_gallery_items_v5";
+const DELETED_ITEMS_KEY = "azizography_deleted_item_ids_v1";
 
 // In-memory cache to prevent redundant JSON.parse and sorting on every render
 let cachedItems: GalleryItem[] | null = null;
+
+// Helper to track permanently deleted items across sessions and syncs
+export function getDeletedItemIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(DELETED_ITEMS_KEY);
+    if (!raw) return new Set();
+    const parsed: string[] = JSON.parse(raw);
+    return new Set(parsed);
+  } catch {
+    return new Set();
+  }
+}
+
+export function markItemAsDeleted(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const deleted = getDeletedItemIds();
+    deleted.add(id);
+    localStorage.setItem(DELETED_ITEMS_KEY, JSON.stringify(Array.from(deleted)));
+  } catch (err) {
+    console.error("Error marking item as deleted:", err);
+  }
+}
+
+export function clearDeletedTombstones(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(DELETED_ITEMS_KEY);
+  } catch (err) {
+    console.error("Error clearing deleted tombstones:", err);
+  }
+}
 
 // Helper to get local items with in-memory caching
 export function getLocalItems(): GalleryItem[] {
@@ -27,24 +61,29 @@ export function getLocalItems(): GalleryItem[] {
     return INITIAL_GALLERY_ITEMS;
   }
 
+  const deletedIds = getDeletedItemIds();
+
   if (cachedItems !== null) {
-    return cachedItems;
+    return cachedItems.filter((item) => !deletedIds.has(item.id));
   }
 
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_GALLERY_ITEMS));
-      cachedItems = [...INITIAL_GALLERY_ITEMS];
+      const initial = INITIAL_GALLERY_ITEMS.filter((item) => !deletedIds.has(item.id));
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initial));
+      cachedItems = initial;
       return cachedItems;
     }
     const parsed: GalleryItem[] = JSON.parse(raw);
-    parsed.sort((a, b) => a.orderIndex - b.orderIndex);
-    cachedItems = parsed;
+    const valid = parsed
+      .filter((item) => !deletedIds.has(item.id))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    cachedItems = valid;
     return cachedItems;
   } catch (err) {
     console.error("Error reading local gallery items:", err);
-    cachedItems = [...INITIAL_GALLERY_ITEMS];
+    cachedItems = INITIAL_GALLERY_ITEMS.filter((item) => !deletedIds.has(item.id));
     return cachedItems;
   }
 }
@@ -64,6 +103,8 @@ export function saveLocalItems(items: GalleryItem[]): void {
 
 // Fetch all gallery items
 export async function getGalleryItems(): Promise<GalleryItem[]> {
+  const deletedIds = getDeletedItemIds();
+
   if (isFirebaseConfigured && db) {
     try {
       const q = query(collection(db, "gallery_items"), orderBy("orderIndex", "asc"));
@@ -74,13 +115,15 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
           ...docSnap.data(),
         })) as GalleryItem[];
 
+        // Exclude any permanently deleted items
+        const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
         const localItems = getLocalItems();
         const mergedMap = new Map<string, GalleryItem>();
-        for (const item of firestoreItems) {
+        for (const item of validFirestore) {
           mergedMap.set(item.id, item);
         }
         for (const item of localItems) {
-          if (!mergedMap.has(item.id)) {
+          if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
             mergedMap.set(item.id, item);
           }
         }
@@ -130,20 +173,22 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
       firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
+          const deletedIds = getDeletedItemIds();
           if (!snapshot.empty) {
             const firestoreItems = snapshot.docs.map((d) => ({
               id: d.id,
               ...d.data(),
             })) as GalleryItem[];
 
-            // Merge Firestore items with local items so newly created items are never lost on refresh
+            // Exclude any permanently deleted items
+            const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
             const localItems = getLocalItems();
             const mergedMap = new Map<string, GalleryItem>();
-            for (const item of firestoreItems) {
+            for (const item of validFirestore) {
               mergedMap.set(item.id, item);
             }
             for (const item of localItems) {
-              if (!mergedMap.has(item.id)) {
+              if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
                 mergedMap.set(item.id, item);
               }
             }
@@ -459,26 +504,61 @@ export async function updateGalleryItem(
   }
 }
 
-// Delete gallery item
-export async function deleteGalleryItem(id: string): Promise<void> {
+// Delete gallery item permanently (from local storage, server disk, Firebase Storage, and Firestore)
+export async function deleteGalleryItem(id: string, itemToDelete?: GalleryItem): Promise<void> {
+  // 1. Mark as permanently deleted in tombstones to prevent resurrection on sync
+  markItemAsDeleted(id);
+
+  // 2. Identify target item to extract image URL & storage path
   const currentItems = getLocalItems();
+  const targetItem = itemToDelete || currentItems.find((item) => item.id === id);
+
+  // 3. Purge immediately from local storage & in-memory cache
   const updatedItems = currentItems
     .filter((item) => item.id !== id)
     .map((item, idx) => ({ ...item, orderIndex: idx }));
   saveLocalItems(updatedItems);
 
+  // 4. Permanently delete media file from server disk (/public/uploads)
+  if (targetItem?.imageUrl || targetItem?.storagePath) {
+    try {
+      await fetch("/api/admin/delete-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: targetItem.imageUrl,
+          storagePath: targetItem.storagePath,
+        }),
+      });
+    } catch (mediaErr) {
+      console.warn("Could not delete local media file:", mediaErr);
+    }
+  }
+
+  // 5. Permanently delete from Firebase Cloud Storage if applicable
+  if (isFirebaseConfigured && storage && targetItem?.storagePath?.startsWith("gallery/")) {
+    try {
+      const storageRef = ref(storage, targetItem.storagePath);
+      await deleteObject(storageRef);
+    } catch (storageErr) {
+      console.warn("Could not delete Firebase Storage object:", storageErr);
+    }
+  }
+
+  // 6. Permanently delete document from Firestore
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", id);
       await deleteDoc(docRef);
     } catch (err) {
-      console.warn("Firestore delete pending rules authorization. Item removed from local storage:", err);
+      console.warn("Firestore delete notice:", err);
     }
   }
 }
 
 // Reset gallery items to default seed
 export async function resetToDefaultSeed(): Promise<void> {
+  clearDeletedTombstones();
   saveLocalItems(INITIAL_GALLERY_ITEMS);
 
   if (isFirebaseConfigured && db) {

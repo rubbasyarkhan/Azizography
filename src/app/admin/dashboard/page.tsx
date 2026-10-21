@@ -135,11 +135,14 @@ function AdminDashboardContent() {
   }, [showNotice]);
 
   const handleDeleteItem = useCallback(async (id: string) => {
-    if (confirm("Permanently delete this photograph?")) {
-      await deleteGalleryItem(id);
-      showNotice("Photograph removed from archive");
+    const itemToDelete = items.find((i) => i.id === id);
+    const itemTitle = itemToDelete?.title || "this photograph";
+    if (confirm(`Permanently delete "${itemTitle}"? This will remove the photograph and its media files.`)) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      await deleteGalleryItem(id, itemToDelete);
+      showNotice("Photograph permanently deleted");
     }
-  }, [showNotice]);
+  }, [items, showNotice]);
 
   const handleSaveEdit = useCallback(async (id: string, updates: Partial<GalleryItem>) => {
     await updateGalleryItem(id, updates);
