@@ -55,6 +55,122 @@ export function clearDeletedTombstones(): void {
   }
 }
 
+// Helper to detect if orderIndex values have duplicates or invalid values
+export function hasDuplicateOrderIndices(items: GalleryItem[]): boolean {
+  if (items.length <= 1) return false;
+  const indices = new Set<number>();
+  for (const item of items) {
+    if (typeof item.orderIndex !== "number" || isNaN(item.orderIndex) || indices.has(item.orderIndex)) {
+      return true;
+    }
+    indices.add(item.orderIndex);
+  }
+  return false;
+}
+
+// Helper to reliably extract timestamp from item
+function getItemTimestamp(item: GalleryItem): number {
+  if (item.createdAt) {
+    const parsed = new Date(item.createdAt).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const match = item.id.match(/^item-(\d+)/);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+}
+
+// Helper to extract numeric carousel part index from title (e.g. "Title (Part 2)" -> 2)
+function getItemPartNumber(item: GalleryItem): number | null {
+  const match = item.title.match(/\(Part\s+(\d+)\)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+// Heal, group, and sort gallery items guaranteeing batches stay together and sequence is strictly 0..N-1
+export function healAndSortGalleryItems(items: GalleryItem[]): GalleryItem[] {
+  if (items.length <= 1) {
+    return items.map((item, idx) => ({ ...item, orderIndex: idx }));
+  }
+
+  // If no duplicate or invalid orderIndex exists, sort purely by valid orderIndex
+  if (!hasDuplicateOrderIndices(items)) {
+    return [...items].sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+
+  // Duplicate orderIndex detected (e.g. from multiple carousel batch imports)
+  // Group into batches by matching seriesOrProject or timestamp cluster (< 60 seconds apart)
+  const itemsWithMeta = items.map((item) => ({
+    item,
+    time: getItemTimestamp(item),
+    part: getItemPartNumber(item),
+  }));
+
+  // Sort by time ascending initially to identify distinct upload sessions
+  itemsWithMeta.sort((a, b) => a.time - b.time);
+
+  const clusters: Array<typeof itemsWithMeta> = [];
+  let currentCluster: typeof itemsWithMeta = [];
+
+  for (const entry of itemsWithMeta) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(entry);
+    } else {
+      const prev = currentCluster[currentCluster.length - 1];
+      const sameSeries =
+        Boolean(entry.item.seriesOrProject) &&
+        Boolean(prev.item.seriesOrProject) &&
+        entry.item.seriesOrProject === prev.item.seriesOrProject;
+      // Items in the same bulk upload session are created within 60 seconds of each other
+      const withinWindow = Math.abs(entry.time - prev.time) < 60000;
+
+      if (sameSeries || withinWindow) {
+        currentCluster.push(entry);
+      } else {
+        clusters.push(currentCluster);
+        currentCluster = [entry];
+      }
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  // Sort clusters: newest bulk upload session first (highest average time)
+  clusters.sort((cA, cB) => {
+    const avgA = cA.reduce((sum, e) => sum + e.time, 0) / cA.length;
+    const avgB = cB.reduce((sum, e) => sum + e.time, 0) / cB.length;
+    return avgB - avgA;
+  });
+
+  // Within each cluster, preserve exact carousel sequence:
+  // 1. If "Part X" is in title, sort by part number
+  // 2. Otherwise sort by relative orderIndex or time ascending
+  const orderedResult: GalleryItem[] = [];
+  for (const cluster of clusters) {
+    cluster.sort((a, b) => {
+      if (a.part !== null && b.part !== null) {
+        return a.part - b.part;
+      }
+      if (a.item.orderIndex !== b.item.orderIndex) {
+        return a.item.orderIndex - b.item.orderIndex;
+      }
+      return a.time - b.time;
+    });
+
+    for (const entry of cluster) {
+      orderedResult.push(entry.item);
+    }
+  }
+
+  // Re-assign strictly sequential orderIndex: 0, 1, 2, ..., N-1 (so UI displays #1, #2, ..., #N)
+  return orderedResult.map((item, idx) => ({
+    ...item,
+    orderIndex: idx,
+  }));
+}
+
 // Helper to get local items with in-memory caching
 export function getLocalItems(): GalleryItem[] {
   if (typeof window === "undefined") {
@@ -76,10 +192,9 @@ export function getLocalItems(): GalleryItem[] {
       return cachedItems;
     }
     const parsed: GalleryItem[] = JSON.parse(raw);
-    const valid = parsed
-      .filter((item) => !deletedIds.has(item.id))
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-    cachedItems = valid;
+    const valid = parsed.filter((item) => !deletedIds.has(item.id));
+    const healed = healAndSortGalleryItems(valid);
+    cachedItems = healed;
     return cachedItems;
   } catch (err) {
     console.error("Error reading local gallery items:", err);
@@ -127,16 +242,14 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
             mergedMap.set(item.id, item);
           }
         }
-        const merged = Array.from(mergedMap.values()).sort((a, b) => {
-          if (a.orderIndex !== b.orderIndex) {
-            return a.orderIndex - b.orderIndex;
-          }
-          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return timeB - timeA;
-        });
-        saveLocalItems(merged);
-        return merged;
+        const rawMerged = Array.from(mergedMap.values());
+        const healed = healAndSortGalleryItems(rawMerged);
+        if (hasDuplicateOrderIndices(rawMerged)) {
+          syncGalleryItemsOrder(healed);
+        } else {
+          saveLocalItems(healed);
+        }
+        return healed;
       } else {
         // Firestore is active and explicitly empty (all gallery items wiped)
         saveLocalItems([]);
@@ -195,16 +308,14 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
                 mergedMap.set(item.id, item);
               }
             }
-            const merged = Array.from(mergedMap.values()).sort((a, b) => {
-              if (a.orderIndex !== b.orderIndex) {
-                return a.orderIndex - b.orderIndex;
-              }
-              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return timeB - timeA;
-            });
-            saveLocalItems(merged);
-            callback(merged);
+            const rawMerged = Array.from(mergedMap.values());
+            const healed = healAndSortGalleryItems(rawMerged);
+            if (hasDuplicateOrderIndices(rawMerged)) {
+              syncGalleryItemsOrder(healed);
+            } else {
+              saveLocalItems(healed);
+            }
+            callback(healed);
           } else {
             // Live Firestore collection is empty (all gallery items wiped)
             saveLocalItems([]);
@@ -272,12 +383,16 @@ export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void>
 
   if (isFirebaseConfigured && db) {
     try {
-      const batch = writeBatch(db);
-      for (const item of normalizedItems) {
-        const itemRef = doc(db, "gallery_items", item.id);
-        batch.set(itemRef, item, { merge: true });
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < normalizedItems.length; c += CHUNK_SIZE) {
+        const chunk = normalizedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const itemRef = doc(db, "gallery_items", item.id);
+          batch.update(itemRef, { orderIndex: item.orderIndex });
+        }
+        await batch.commit();
       }
-      await batch.commit();
     } catch (err) {
       console.warn("Firestore order sync pending rules authorization. Order saved in local storage:", err);
     }
@@ -439,9 +554,20 @@ export async function createGalleryItem(
 
   if (isFirebaseConfigured && db) {
     try {
-      const docRef = doc(db, "gallery_items", newId);
-      const cleaned = cleanFirestoreData(updatedItems[0]);
-      await setDoc(docRef, cleaned);
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
+        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const docRef = doc(db, "gallery_items", item.id);
+          if (item.id === newId) {
+            batch.set(docRef, cleanFirestoreData(item));
+          } else {
+            batch.update(docRef, { orderIndex: item.orderIndex });
+          }
+        }
+        await batch.commit();
+      }
     } catch (err) {
       console.warn("Firestore document write notice:", err);
     }
@@ -473,19 +599,27 @@ export async function createMultipleGalleryItems(
 
   if (isFirebaseConfigured && db) {
     try {
-      const batch = writeBatch(db);
-      for (const item of newItems) {
-        const docRef = doc(db, "gallery_items", item.id);
-        const cleaned = cleanFirestoreData(item);
-        batch.set(docRef, cleaned);
+      const newItemIds = new Set(newItems.map((n) => n.id));
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
+        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const docRef = doc(db, "gallery_items", item.id);
+          if (newItemIds.has(item.id)) {
+            batch.set(docRef, cleanFirestoreData(item));
+          } else {
+            batch.update(docRef, { orderIndex: item.orderIndex });
+          }
+        }
+        await batch.commit();
       }
-      await batch.commit();
     } catch (err) {
       console.warn("Firestore batch write notice:", err);
     }
   }
 
-  return newItems;
+  return updatedItems.slice(0, newItems.length);
 }
 
 // Update specific gallery item
@@ -556,6 +690,7 @@ export async function deleteGalleryItem(id: string, itemToDelete?: GalleryItem):
     try {
       const docRef = doc(db, "gallery_items", id);
       await deleteDoc(docRef);
+      await syncGalleryItemsOrder(updatedItems);
     } catch (err) {
       console.warn("Firestore delete notice:", err);
     }
