@@ -450,13 +450,14 @@ export async function createGalleryItem(
   return updatedItems[0];
 }
 
-// Add multiple gallery items in one batch preserving sequence
+// Add multiple gallery items in one batch preserving sequence (maximum 10 at a time)
 export async function createMultipleGalleryItems(
   itemsData: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">>
 ): Promise<GalleryItem[]> {
+  const cappedData = itemsData.slice(0, 10);
   const currentItems = getLocalItems();
   const now = Date.now();
-  const newItems: GalleryItem[] = itemsData.map((data, idx) => ({
+  const newItems: GalleryItem[] = cappedData.map((data, idx) => ({
     ...data,
     id: `item-${now + idx}-${Math.random().toString(36).substring(2, 7)}`,
     orderIndex: idx,

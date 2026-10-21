@@ -105,7 +105,7 @@ export default function ImageUploader({
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const origin = window.location.origin;
-      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role="dialog"]')||document.querySelector('article')||document.body;for(var rw=0;rw<15;rw++){var prevBtn=root.querySelector('button[aria-label="Previous"],button[aria-label*="Previous"],button[aria-label="Go to previous slide"],button[aria-label*="Précédent"],button[aria-label*="Anterior"],div[role="button"][aria-label*="Previous"],button:has(polyline[points*="8.5"])');if(!prevBtn)break;prevBtn.click();await new Promise(function(r){setTimeout(r,120);});}var collected=[];var seen=new Set();function getHighRes(img){var bestUrl='';var maxW=0;if(img.srcset){var re=/(https?:\\/\\/[^\\s]+)\\s+(\\d+)w/g;var m;while((m=re.exec(img.srcset))!==null){var w=parseInt(m[2],10);if(w>maxW){maxW=w;bestUrl=m[1];}}}if(bestUrl&&maxW>=640)return bestUrl;if(img.currentSrc&&!img.currentSrc.includes('150x150')&&!img.currentSrc.includes('240x240')&&!img.currentSrc.includes('320x320')){return img.currentSrc;}return bestUrl||img.currentSrc||img.src;}function isPostImg(img){var alt=(img.getAttribute('alt')||'').toLowerCase();if(alt.includes('profile picture')||alt.includes('profile photo'))return false;var w=img.naturalWidth||img.width||0;var h=img.naturalHeight||img.height||0;if(w>0&&w<240)return false;if(h>0&&h<240)return false;var s=img.src||img.currentSrc||'';if(!s.includes('cdninstagram')&&!s.includes('fbcdn'))return false;if(s.includes('/rsrc.php/')||s.includes('static.cdninstagram'))return false;return true;}function scan(){var imgs=Array.from(root.querySelectorAll('img')).filter(isPostImg);for(var i=0;i<imgs.length;i++){var u=getHighRes(imgs[i]);if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<15;step++){var nextBtn=root.querySelector('button[aria-label="Next"],button[aria-label*="Next"],button[aria-label="Go to next slide"],button[aria-label*="Suivant"],button[aria-label*="Siguiente"],button:has(polyline[points*="16.5"]),div[role="button"][aria-label*="Next"],button[aria-label*="Next slide"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,420);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var finalImgs=[];var idMap=new Map();for(var j=0;j<collected.length;j++){var url=collected[j];var keyMatch=url.match(/_([0-9]{12,22})_n\\./);var key=keyMatch?keyMatch[1]:url.split('?')[0];var isThumb=url.includes('150x150')||url.includes('240x240')||url.includes('320x320');if(!idMap.has(key)){idMap.set(key,url);finalImgs.push(url);}else if(!isThumb&&(idMap.get(key).includes('150x150')||idMap.get(key).includes('240x240')||idMap.get(key).includes('320x320'))){var oldIdx=finalImgs.indexOf(idMap.get(key));if(oldIdx!==-1)finalImgs[oldIdx]=url;idMap.set(key,url);}}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var alts=Array.from(root.querySelectorAll('img[alt]'));for(var k=0;k<alts.length;k++){var txt=alts[k].getAttribute('alt')||'';if(txt&&!txt.startsWith('Photo by')&&!txt.startsWith('May be')){c=txt;break;}}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(finalImgs));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(finalImgs[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
+      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role="dialog"]')||document.querySelector('article')||document.body;for(var rw=0;rw<15;rw++){var prevBtn=root.querySelector('button[aria-label="Previous"],button[aria-label*="Previous"],button[aria-label="Go to previous slide"],button[aria-label*="Précédent"],button[aria-label*="Anterior"],div[role="button"][aria-label*="Previous"],button:has(polyline[points*="8.5"])');if(!prevBtn)break;prevBtn.click();await new Promise(function(r){setTimeout(r,120);});}var collected=[];var seen=new Set();function getHighRes(img){var bestUrl='';var maxW=0;if(img.srcset){var re=/(https?:\\/\\/[^\\s]+)\\s+(\\d+)w/g;var m;while((m=re.exec(img.srcset))!==null){var w=parseInt(m[2],10);if(w>maxW){maxW=w;bestUrl=m[1];}}}if(bestUrl&&maxW>=640)return bestUrl;if(img.currentSrc&&!img.currentSrc.includes('150x150')&&!img.currentSrc.includes('240x240')&&!img.currentSrc.includes('320x320')){return img.currentSrc;}return bestUrl||img.currentSrc||img.src;}function isPostImg(img){var alt=(img.getAttribute('alt')||'').toLowerCase();if(alt.includes('profile picture')||alt.includes('profile photo'))return false;var w=img.naturalWidth||img.width||0;var h=img.naturalHeight||img.height||0;if(w>0&&w<240)return false;if(h>0&&h<240)return false;var s=img.src||img.currentSrc||'';if(!s.includes('cdninstagram')&&!s.includes('fbcdn'))return false;if(s.includes('/rsrc.php/')||s.includes('static.cdninstagram'))return false;return true;}function scan(){var imgs=Array.from(root.querySelectorAll('img')).filter(isPostImg);for(var i=0;i<imgs.length;i++){var u=getHighRes(imgs[i]);if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<15;step++){var nextBtn=root.querySelector('button[aria-label="Next"],button[aria-label*="Next"],button[aria-label="Go to next slide"],button[aria-label*="Suivant"],button[aria-label*="Siguiente"],button:has(polyline[points*="16.5"]),div[role="button"][aria-label*="Next"],button[aria-label*="Next slide"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,420);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var finalImgs=[];var idMap=new Map();for(var j=0;j<collected.length;j++){var url=collected[j];var keyMatch=url.match(/_([0-9]{12,22})_n\\./);var key=keyMatch?keyMatch[1]:url.split('?')[0];var isThumb=url.includes('150x150')||url.includes('240x240')||url.includes('320x320');if(!idMap.has(key)){idMap.set(key,url);finalImgs.push(url);}else if(!isThumb&&(idMap.get(key).includes('150x150')||idMap.get(key).includes('240x240')||idMap.get(key).includes('320x320'))){var oldIdx=finalImgs.indexOf(idMap.get(key));if(oldIdx!==-1)finalImgs[oldIdx]=url;idMap.set(key,url);}}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var alts=Array.from(root.querySelectorAll('img[alt]'));for(var k=0;k<alts.length;k++){var txt=alts[k].getAttribute('alt')||'';if(txt&&!txt.startsWith('Photo by')&&!txt.startsWith('May be')){c=txt;break;}}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(finalImgs.slice(0, 10)));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(finalImgs[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
       setBookmarkletCode(code);
     }
   }, []);
@@ -140,12 +140,17 @@ export default function ImageUploader({
       }
 
       if (initialImportData.imageUrls && initialImportData.imageUrls.length > 0) {
-        setCarouselImages(initialImportData.imageUrls);
-        setSelectedCarouselIndices(initialImportData.imageUrls.map((_, i) => i));
+        // Enforce maximum 10 images at a time for bulk import
+        const cappedImages = initialImportData.imageUrls.slice(0, 10);
+        setCarouselImages(cappedImages);
+        setSelectedCarouselIndices(cappedImages.map((_, i) => i));
         setActiveCarouselIdx(0);
-        const firstImg = initialImportData.imageUrls[0];
+        const firstImg = cappedImages[0];
         setInstagramInputUrl(firstImg);
         handleInstagramImport(firstImg, initialImportData.postUrl, initialImportData.caption);
+        if (initialImportData.imageUrls.length > 10) {
+          setInstagramNotice("✨ Carousel post imported (limited to maximum 10 photographs at a time).");
+        }
       } else if (initialImportData.imageUrl) {
         setCarouselImages([initialImportData.imageUrl]);
         setSelectedCarouselIndices([0]);
@@ -264,7 +269,9 @@ export default function ImageUploader({
     if (carouselImages.length === 0) return;
     setBatchImporting(true);
     setError(null);
-    const targets = carouselImages.filter((_, i) => selectedCarouselIndices.includes(i));
+    const targets = carouselImages
+      .filter((_, i) => selectedCarouselIndices.includes(i))
+      .slice(0, 10);
     if (targets.length === 0) {
       setError("Please select at least one photograph from the carousel.");
       setBatchImporting(false);
@@ -669,7 +676,7 @@ export default function ImageUploader({
                   Carousel Post
                 </span>
                 <span className="text-xs font-bold text-stone-900">
-                  {carouselImages.length} Photographs Found &bull; {selectedCarouselIndices.length} Selected
+                  {carouselImages.length} Photographs Found &bull; {selectedCarouselIndices.length}/10 Selected (Max 10)
                 </span>
               </div>
               <button
@@ -688,7 +695,7 @@ export default function ImageUploader({
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>⚡ Batch Import Selected ({selectedCarouselIndices.length} Photos)</span>
+                    <span>⚡ Batch Import Selected ({selectedCarouselIndices.length} Photos, Max 10)</span>
                   </>
                 )}
               </button>
@@ -730,9 +737,18 @@ export default function ImageUploader({
                       aria-label={isChecked ? `Exclude slide #${idx + 1}` : `Include slide #${idx + 1}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedCarouselIndices((prev) =>
-                          isChecked ? prev.filter((i) => i !== idx) : [...prev, idx]
-                        );
+                        setSelectedCarouselIndices((prev) => {
+                          if (isChecked) {
+                            return prev.filter((i) => i !== idx);
+                          } else {
+                            if (prev.length >= 10) {
+                              setError("Maximum 10 images can be imported at a time.");
+                              return prev;
+                            }
+                            setError(null);
+                            return [...prev, idx];
+                          }
+                        });
                       }}
                       className={`absolute top-1 left-1 w-4 h-4 rounded flex items-center justify-center transition-all cursor-pointer shadow-xs ${
                         isChecked
@@ -1203,7 +1219,7 @@ export default function ImageUploader({
           <div className="text-xs text-stone-500">
             {carouselImages.length > 1 ? (
               <span className="font-semibold text-purple-800">
-                📸 Carousel post: {selectedCarouselIndices.length} of {carouselImages.length} photographs selected
+                📸 Carousel post: {selectedCarouselIndices.length} of {carouselImages.length} photographs selected (Max 10 at a time)
               </span>
             ) : (
               <span>All metadata fields are optional</span>
@@ -1249,7 +1265,7 @@ export default function ImageUploader({
                   <span>Publishing to Archive...</span>
                 </span>
               ) : carouselImages.length > 1 && selectedCarouselIndices.length > 1 ? (
-                <span>Publish All {selectedCarouselIndices.length} Photographs</span>
+                <span>Publish {Math.min(selectedCarouselIndices.length, 10)} Photographs (Max 10)</span>
               ) : (
                 <span>Publish Photograph</span>
               )}

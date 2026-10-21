@@ -64,9 +64,11 @@ function AdminDashboardContent() {
       }
 
       if (parsedImgs.length > 0) {
+        // Enforce maximum 10 images at a time for bulk import
+        const cappedImgs = parsedImgs.slice(0, 10);
         setImportData({
-          imageUrl: parsedImgs[0],
-          imageUrls: parsedImgs,
+          imageUrl: cappedImgs[0],
+          imageUrls: cappedImgs,
           postUrl: post || undefined,
           caption: caption || undefined,
         });

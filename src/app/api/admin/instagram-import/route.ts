@@ -5,10 +5,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { url, urls, postUrl } = body;
 
-    // Batch direct images handler (downloads multiple carousel images in parallel)
+    // Batch direct images handler (downloads multiple carousel images in parallel, max 10 at a time)
     if (Array.isArray(urls) && urls.length > 0) {
       const items = await Promise.all(
-        urls.slice(0, 25).map(async (u: string) => {
+        urls.slice(0, 10).map(async (u: string) => {
           try {
             const imgRes = await fetch(u.trim(), {
               headers: {
