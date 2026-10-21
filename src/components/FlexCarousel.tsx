@@ -22,7 +22,7 @@ export interface FlexCarouselItem {
 export interface FlexCarouselProps {
   items?: FlexCarouselItem[];
   initialIndex?: number;
-  preset?: 'liquid' | 'ribbon' | 'vortex' | 'arch';
+  preset?: 'gallery' | 'liquid' | 'ribbon' | 'vortex' | 'arch';
   intro?: 'rise' | 'bloom' | 'spin' | 'deal' | 'none';
   cardHeight?: number;
   gap?: number;
@@ -54,6 +54,18 @@ export interface FlexCarouselProps {
 const DEFAULT_ITEMS: FlexCarouselItem[] = [];
 
 const BEND_PRESETS = {
+  gallery: {
+    lensWidth: 0.82,
+    lensHeight: 0.82,
+    tilt: 0,
+    roundness: 1,
+    bend: 0.16,
+    reach: 0.36,
+    curl: 'rise',
+    dispersion: 0,
+    liquid: 0,
+    followCursor: false
+  },
   liquid: {
     lensWidth: 0.74,
     lensHeight: 1.18,
@@ -157,13 +169,17 @@ void main() {
   float sd = roundedBox(vLocal, uSize * 0.5, min(uRadius, min(uSize.x, uSize.y) * 0.5));
   float mask = clamp(0.5 - sd * uDpr, 0.0, 1.0);
   vec2 local = vLocal / uSize + 0.5;
-  float cardAspect = uSize.x / uSize.y;
+  float cardAspect = uSize.x / max(uSize.y, 1.0);
   float imageAspect = uImage.x / max(uImage.y, 1.0);
-  vec2 scale = imageAspect > cardAspect ? vec2(cardAspect / imageAspect, 1.0) : vec2(1.0, imageAspect / cardAspect);
-  scale /= 1.08;
+  vec2 scale = vec2(1.0);
+  if (abs(imageAspect - cardAspect) > 0.005) {
+    scale = imageAspect > cardAspect ? vec2(cardAspect / imageAspect, 1.0) : vec2(1.0, imageAspect / cardAspect);
+  }
   vec2 uv = vec2(local.x, 1.0 - local.y);
   uv = (uv - 0.5) * scale + 0.5;
-  uv.x += uShift * (1.0 - scale.x) * 0.5;
+  if (scale.x < 0.999) {
+    uv.x += uShift * (1.0 - scale.x) * 0.5;
+  }
   vec3 image = texture(tMap, uv).rgb;
   vec3 color = mix(uPlaceholder, image, uReady);
   float alpha = mask * uAlpha * smoothstep(0.0, 0.08, uReady);
@@ -568,16 +584,43 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
     };
 
     const metrics = s => {
-      const cardH = Math.max(24, s.cardHeight * height);
+      const baseCardH = Math.max(24, s.cardHeight * height);
+      // Max allowable width for a single card so wide landscape photos don't bleed offscreen
+      const maxCardW = Math.max(24, Math.min(width * 0.88, baseCardH * 1.85));
       const fixed = FIT_ASPECT[s.fit];
-      const widths = slots.map(slot => (fixed || slot.aspect) * cardH);
+
+      const widths = [];
+      const heights = [];
       const centers = [];
       let cursor = 0;
-      for (let i = 0; i < widths.length; i++) {
-        centers.push(cursor + widths[i] / 2);
-        cursor += widths[i] + s.gap;
+
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        const asp = fixed || slot.aspect || (slot.image[0] / Math.max(slot.image[1], 1)) || 0.75;
+
+        let w = baseCardH * asp;
+        let h = baseCardH;
+
+        if (fixed) {
+          h = baseCardH;
+          w = fixed * baseCardH;
+        } else {
+          if (asp * baseCardH <= maxCardW) {
+            h = baseCardH;
+            w = asp * baseCardH;
+          } else {
+            w = maxCardW;
+            h = maxCardW / asp;
+          }
+        }
+
+        widths.push(w);
+        heights.push(h);
+        centers.push(cursor + w / 2);
+        cursor += w + s.gap;
       }
-      return { cardH, widths, centers, gap: s.gap, loop: Math.max(cursor, 1) };
+
+      return { cardH: baseCardH, widths, heights, centers, gap: s.gap, loop: Math.max(cursor, 1) };
     };
 
     const nearest = (m, at) => {
@@ -874,7 +917,8 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
       const focusAmount = clamp01(focus.t);
       const focusEase = easeInOut(focusAmount);
       const focusW = focus.index >= 0 && focus.index < n ? m.widths[focus.index] : m.cardH;
-      const focusScale = Math.max(1, Math.min(1.3, (height * 0.84) / m.cardH, (width * 0.92) / focusW));
+      const focusH = focus.index >= 0 && focus.index < n && m.heights ? m.heights[focus.index] : m.cardH;
+      const focusScale = Math.max(1, Math.min(1.35, (height * 0.86) / focusH, (width * 0.92) / focusW));
       const nextLift = 1 + (focusScale - 1) * focusEase;
       if (Math.abs(nextLift - lift) > 0.0005) {
         lift = nextLift;
@@ -948,9 +992,11 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
                 alpha *= 1 - part;
               }
             }
+            const h = m.heights ? m.heights[i] : cardH;
             const cw = w * scale;
+            const ch = h * scale;
             if (alpha <= 0.001 || x + cw / 2 < -40 || x - cw / 2 > width + 40) continue;
-            draws.push({ i, rel, x, y: homeY + (fx ? fx.y : 0), cw, ch: cardH * scale, alpha });
+            draws.push({ i, rel, x, y: homeY + (fx ? fx.y : 0), cw, ch, alpha });
           }
         }
         draws.sort((a, b) => Math.abs(b.rel) - Math.abs(a.rel));

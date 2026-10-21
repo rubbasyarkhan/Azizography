@@ -66,12 +66,14 @@ export default function LightboxModal({
         aspect = 1.5;
       } else if (itm.aspectRatio === "square") {
         aspect = 1.0;
+      } else if (itm.aspectRatio === "tall") {
+        aspect = 0.5625;
       } else if (itm.aspectRatio === "portrait") {
         aspect = 0.75;
       }
 
       return {
-        src: getOptimizedImageUrl(itm.imageUrl, 1200, 78),
+        src: getOptimizedImageUrl(itm.imageUrl, 1600, 85),
         alt: itm.title,
         title: itm.title,
         subtitle: itm.description || itm.seriesOrProject || itm.artist || itm.location || "",
@@ -167,13 +169,16 @@ export default function LightboxModal({
           <FlexCarousel
             items={carouselItems}
             initialIndex={initialIndex}
-            preset="liquid"
+            preset="gallery"
             intro="none"
-            cardHeight={0.48}
-            gap={16}
+            cardHeight={0.65}
+            gap={20}
             radius={4}
             fit="natural"
-            squeeze={0.2}
+            squeeze={0}
+            tilt={0}
+            bend={0.16}
+            dispersion={0}
             focusOnClick={true}
             captions={true}
             captureWheel={true}

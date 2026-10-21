@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { GalleryItem, GalleryCategory } from "@/types/gallery";
+import { getAllCategories, addCustomCategory, CategoryOption } from "@/lib/category-service";
 import {
   X,
   Trash2,
@@ -10,7 +11,7 @@ import {
 import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface EditItemModalProps {
-  item: GalleryItem | null;
+  item: GalleryItem;
   onClose: () => void;
   onSave: (id: string, updates: Partial<GalleryItem>) => void;
   onDelete: (id: string) => void;
@@ -22,12 +23,15 @@ export default function EditItemModal({
   onSave,
   onDelete,
 }: EditItemModalProps) {
-  if (!item) return null;
-
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description || "");
   const [seriesOrProject, setSeriesOrProject] = useState(item.seriesOrProject || "");
   const [category, setCategory] = useState<GalleryCategory>(item.category);
+  const [availableCategories, setAvailableCategories] = useState<CategoryOption[]>(() =>
+    getAllCategories()
+  );
+  const [isAddingNewCat, setIsAddingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
   const [artist, setArtist] = useState(item.artist || "");
   const [location, setLocation] = useState(item.location || "");
   const [year, setYear] = useState(item.year || "");
@@ -76,11 +80,21 @@ export default function EditItemModal({
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const cleanTitle = title.trim() || item.seriesOrProject || "Untitled Photograph";
+
+    const cleanExif: Record<string, string> = {};
+    if (camera.trim()) cleanExif.camera = camera.trim();
+    if (lens.trim()) cleanExif.lens = lens.trim();
+    if (iso.trim()) cleanExif.iso = iso.trim();
+    if (aperture.trim()) cleanExif.aperture = aperture.trim();
+    if (shutter.trim()) cleanExif.shutter = shutter.trim();
+    const hasExif = Object.keys(cleanExif).length > 0;
+
     onSave(item.id, {
-      title,
+      title: cleanTitle,
       description: description.trim() || undefined,
       seriesOrProject: seriesOrProject.trim() || undefined,
-      category,
+      category: category || "people",
       artist: artist.trim() || undefined,
       location: location.trim() || undefined,
       year: year.trim() || undefined,
@@ -91,13 +105,7 @@ export default function EditItemModal({
       isIrisItem,
       isFooterTrailItem,
       tags: tags.length > 0 ? tags : undefined,
-      exif: {
-        camera,
-        lens,
-        iso,
-        aperture,
-        shutter,
-      },
+      exif: hasExif ? cleanExif : undefined,
     });
     onClose();
   };
@@ -144,6 +152,7 @@ export default function EditItemModal({
                 src={item.imageUrl}
                 alt={item.title}
                 fill
+                sizes="80px"
                 className="object-cover"
               />
             </div>
@@ -163,21 +172,23 @@ export default function EditItemModal({
           {/* Form Fields */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Photograph Title *
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Photograph Title</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
-                required
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. After Hours Arena Tour"
                 className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Series / Project / Story (Appears in Portfolio Sidebar)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Series / Project / Story (Appears in Portfolio Sidebar)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"
@@ -189,8 +200,9 @@ export default function EditItemModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Description / Editorial Notes
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Description / Editorial Notes</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <textarea
                 rows={2}
@@ -223,25 +235,69 @@ export default function EditItemModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Category *
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Category</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as GalleryCategory)}
+                  value={isAddingNewCat ? "__new__" : category}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setIsAddingNewCat(true);
+                    } else {
+                      setIsAddingNewCat(false);
+                      setCategory(e.target.value as GalleryCategory);
+                    }
+                  }}
                   className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
                 >
-                  <option value="people">Portraits & People</option>
-                  <option value="concerts">Live & Concerts</option>
-                  <option value="singers">Vocalists & Singers</option>
-                  <option value="weddings">Weddings & Ceremonies</option>
-                  <option value="events">Festivals & Events</option>
+                  {availableCategories.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add New Category...</option>
                 </select>
+
+                {isAddingNewCat && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCatInput}
+                      onChange={(e) => setNewCatInput(e.target.value)}
+                      placeholder="e.g. Street Photography"
+                      className="flex-1 bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-xs sm:text-sm text-[#1C1917] rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newCatInput.trim()) return;
+                        const added = await addCustomCategory(newCatInput.trim());
+                        setAvailableCategories(getAllCategories());
+                        setCategory(added.key);
+                        setIsAddingNewCat(false);
+                        setNewCatInput("");
+                      }}
+                      className="px-3 py-1.5 bg-[#1C1917] text-white text-xs font-semibold rounded-lg hover:bg-stone-800"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewCat(false)}
+                      className="px-2 py-1.5 text-stone-500 hover:text-stone-800 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Aspect Ratio
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Aspect Ratio</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
                   value={aspectRatio}
@@ -260,8 +316,9 @@ export default function EditItemModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Artist / Subject
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Artist / Subject</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -273,8 +330,9 @@ export default function EditItemModal({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Location
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Location</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -286,8 +344,9 @@ export default function EditItemModal({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Year
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Year</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -300,8 +359,9 @@ export default function EditItemModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Tags (comma separated)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Tags (comma separated)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"

@@ -35,7 +35,49 @@ function AdminDashboardContent() {
   const [showAboutEditor, setShowAboutEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [importData, setImportData] = useState<{
+    imageUrl?: string;
+    imageUrls?: string[];
+    postUrl?: string;
+    caption?: string;
+  } | null>(null);
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if opened from Instagram Bookmarklet
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const rawImgs = params.get("import_imgs");
+      const img = params.get("import_img");
+      const post = params.get("import_post");
+      const caption = params.get("import_caption");
+
+      let parsedImgs: string[] = [];
+      if (rawImgs) {
+        try {
+          parsedImgs = JSON.parse(rawImgs);
+        } catch {
+          parsedImgs = rawImgs.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      } else if (img) {
+        parsedImgs = [img];
+      }
+
+      if (parsedImgs.length > 0) {
+        // Enforce maximum 10 images at a time for bulk import
+        const cappedImgs = parsedImgs.slice(0, 10);
+        setImportData({
+          imageUrl: cappedImgs[0],
+          imageUrls: cappedImgs,
+          postUrl: post || undefined,
+          caption: caption || undefined,
+        });
+        setShowUploader(true);
+        // Clean URL query parameters quietly without a page reload
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, []);
 
   // Auth Guard
   useEffect(() => {
@@ -95,11 +137,14 @@ function AdminDashboardContent() {
   }, [showNotice]);
 
   const handleDeleteItem = useCallback(async (id: string) => {
-    if (confirm("Permanently delete this photograph?")) {
-      await deleteGalleryItem(id);
-      showNotice("Photograph removed from archive");
+    const itemToDelete = items.find((i) => i.id === id);
+    const itemTitle = itemToDelete?.title || "this photograph";
+    if (confirm(`Permanently delete "${itemTitle}"? This will remove the photograph and its media files.`)) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      await deleteGalleryItem(id, itemToDelete);
+      showNotice("Photograph permanently deleted");
     }
-  }, [showNotice]);
+  }, [items, showNotice]);
 
   const handleSaveEdit = useCallback(async (id: string, updates: Partial<GalleryItem>) => {
     await updateGalleryItem(id, updates);
@@ -228,11 +273,16 @@ function AdminDashboardContent() {
         {showUploader && (
           <div className="animate-in fade-in duration-150">
             <ImageUploader
+              initialImportData={importData}
               onSuccess={() => {
                 setShowUploader(false);
+                setImportData(null);
                 showNotice("Photograph published to portfolio");
               }}
-              onCancel={() => setShowUploader(false)}
+              onCancel={() => {
+                setShowUploader(false);
+                setImportData(null);
+              }}
             />
           </div>
         )}
@@ -271,12 +321,15 @@ function AdminDashboardContent() {
       />
 
       {/* Edit Item Modal */}
-      <EditItemModal
-        item={editingItem}
-        onClose={() => setEditingItem(null)}
-        onSave={handleSaveEdit}
-        onDelete={handleDeleteItem}
-      />
+      {editingItem && (
+        <EditItemModal
+          key={editingItem.id}
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSave={handleSaveEdit}
+          onDelete={handleDeleteItem}
+        />
+      )}
     </div>
   );
 }

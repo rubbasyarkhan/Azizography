@@ -14,12 +14,162 @@ import {
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 const LOCAL_STORAGE_KEY = "azizography_gallery_items_v5";
+const DELETED_ITEMS_KEY = "azizography_deleted_item_ids_v1";
 
 // In-memory cache to prevent redundant JSON.parse and sorting on every render
 let cachedItems: GalleryItem[] | null = null;
+
+// Helper to track permanently deleted items across sessions and syncs
+export function getDeletedItemIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(DELETED_ITEMS_KEY);
+    if (!raw) return new Set();
+    const parsed: string[] = JSON.parse(raw);
+    return new Set(parsed);
+  } catch {
+    return new Set();
+  }
+}
+
+export function markItemAsDeleted(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const deleted = getDeletedItemIds();
+    deleted.add(id);
+    localStorage.setItem(DELETED_ITEMS_KEY, JSON.stringify(Array.from(deleted)));
+  } catch (err) {
+    console.error("Error marking item as deleted:", err);
+  }
+}
+
+export function clearDeletedTombstones(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(DELETED_ITEMS_KEY);
+  } catch (err) {
+    console.error("Error clearing deleted tombstones:", err);
+  }
+}
+
+// Helper to detect if orderIndex values have duplicates or invalid values
+export function hasDuplicateOrderIndices(items: GalleryItem[]): boolean {
+  if (items.length <= 1) return false;
+  const indices = new Set<number>();
+  for (const item of items) {
+    if (typeof item.orderIndex !== "number" || isNaN(item.orderIndex) || indices.has(item.orderIndex)) {
+      return true;
+    }
+    indices.add(item.orderIndex);
+  }
+  return false;
+}
+
+// Helper to reliably extract timestamp from item
+function getItemTimestamp(item: GalleryItem): number {
+  if (item.createdAt) {
+    const parsed = new Date(item.createdAt).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const match = item.id.match(/^item-(\d+)/);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+}
+
+// Helper to extract numeric carousel part index from title (e.g. "Title (Part 2)" -> 2)
+function getItemPartNumber(item: GalleryItem): number | null {
+  const match = item.title.match(/\(Part\s+(\d+)\)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+// Heal, group, and sort gallery items guaranteeing batches stay together and sequence is strictly 0..N-1
+export function healAndSortGalleryItems(items: GalleryItem[]): GalleryItem[] {
+  if (items.length <= 1) {
+    return items.map((item, idx) => ({ ...item, orderIndex: idx }));
+  }
+
+  // If no duplicate or invalid orderIndex exists, sort purely by valid orderIndex
+  if (!hasDuplicateOrderIndices(items)) {
+    return [...items].sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+
+  // Duplicate orderIndex detected (e.g. from multiple carousel batch imports)
+  // Group into batches by matching seriesOrProject or timestamp cluster (< 60 seconds apart)
+  const itemsWithMeta = items.map((item) => ({
+    item,
+    time: getItemTimestamp(item),
+    part: getItemPartNumber(item),
+  }));
+
+  // Sort by time ascending initially to identify distinct upload sessions
+  itemsWithMeta.sort((a, b) => a.time - b.time);
+
+  const clusters: Array<typeof itemsWithMeta> = [];
+  let currentCluster: typeof itemsWithMeta = [];
+
+  for (const entry of itemsWithMeta) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(entry);
+    } else {
+      const prev = currentCluster[currentCluster.length - 1];
+      const sameSeries =
+        Boolean(entry.item.seriesOrProject) &&
+        Boolean(prev.item.seriesOrProject) &&
+        entry.item.seriesOrProject === prev.item.seriesOrProject;
+      // Items in the same bulk upload session are created within 60 seconds of each other
+      const withinWindow = Math.abs(entry.time - prev.time) < 60000;
+
+      if (sameSeries || withinWindow) {
+        currentCluster.push(entry);
+      } else {
+        clusters.push(currentCluster);
+        currentCluster = [entry];
+      }
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  // Sort clusters: newest bulk upload session first (highest average time)
+  clusters.sort((cA, cB) => {
+    const avgA = cA.reduce((sum, e) => sum + e.time, 0) / cA.length;
+    const avgB = cB.reduce((sum, e) => sum + e.time, 0) / cB.length;
+    return avgB - avgA;
+  });
+
+  // Within each cluster, preserve exact carousel sequence:
+  // 1. If "Part X" is in title, sort by part number
+  // 2. Otherwise sort by relative orderIndex or time ascending
+  const orderedResult: GalleryItem[] = [];
+  for (const cluster of clusters) {
+    cluster.sort((a, b) => {
+      if (a.part !== null && b.part !== null) {
+        return a.part - b.part;
+      }
+      if (a.item.orderIndex !== b.item.orderIndex) {
+        return a.item.orderIndex - b.item.orderIndex;
+      }
+      return a.time - b.time;
+    });
+
+    for (const entry of cluster) {
+      orderedResult.push(entry.item);
+    }
+  }
+
+  // Re-assign strictly sequential orderIndex: 0, 1, 2, ..., N-1 (so UI displays #1, #2, ..., #N)
+  return orderedResult.map((item, idx) => ({
+    ...item,
+    orderIndex: idx,
+  }));
+}
 
 // Helper to get local items with in-memory caching
 export function getLocalItems(): GalleryItem[] {
@@ -27,24 +177,28 @@ export function getLocalItems(): GalleryItem[] {
     return INITIAL_GALLERY_ITEMS;
   }
 
+  const deletedIds = getDeletedItemIds();
+
   if (cachedItems !== null) {
-    return cachedItems;
+    return cachedItems.filter((item) => !deletedIds.has(item.id));
   }
 
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_GALLERY_ITEMS));
-      cachedItems = [...INITIAL_GALLERY_ITEMS];
+      const initial = INITIAL_GALLERY_ITEMS.filter((item) => !deletedIds.has(item.id));
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initial));
+      cachedItems = initial;
       return cachedItems;
     }
     const parsed: GalleryItem[] = JSON.parse(raw);
-    parsed.sort((a, b) => a.orderIndex - b.orderIndex);
-    cachedItems = parsed;
+    const valid = parsed.filter((item) => !deletedIds.has(item.id));
+    const healed = healAndSortGalleryItems(valid);
+    cachedItems = healed;
     return cachedItems;
   } catch (err) {
     console.error("Error reading local gallery items:", err);
-    cachedItems = [...INITIAL_GALLERY_ITEMS];
+    cachedItems = INITIAL_GALLERY_ITEMS.filter((item) => !deletedIds.has(item.id));
     return cachedItems;
   }
 }
@@ -64,19 +218,43 @@ export function saveLocalItems(items: GalleryItem[]): void {
 
 // Fetch all gallery items
 export async function getGalleryItems(): Promise<GalleryItem[]> {
+  const deletedIds = getDeletedItemIds();
+
   if (isFirebaseConfigured && db) {
     try {
       const q = query(collection(db, "gallery_items"), orderBy("orderIndex", "asc"));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        const items = snapshot.docs.map((docSnap) => ({
+        const firestoreItems = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         })) as GalleryItem[];
-        saveLocalItems(items);
-        return items;
+
+        // Exclude any permanently deleted items
+        const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
+        const localItems = getLocalItems();
+        const mergedMap = new Map<string, GalleryItem>();
+        for (const item of validFirestore) {
+          mergedMap.set(item.id, item);
+        }
+        for (const item of localItems) {
+          if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
+            mergedMap.set(item.id, item);
+          }
+        }
+        const rawMerged = Array.from(mergedMap.values());
+        const healed = healAndSortGalleryItems(rawMerged);
+        if (hasDuplicateOrderIndices(rawMerged)) {
+          syncGalleryItemsOrder(healed);
+        } else {
+          saveLocalItems(healed);
+        }
+        return healed;
+      } else {
+        // Firestore is active and explicitly empty (all gallery items wiped)
+        saveLocalItems([]);
+        return [];
       }
-      return [];
     } catch (err) {
       console.warn("Firestore fetch failed, falling back to local storage:", err);
       return getLocalItems();
@@ -111,15 +289,37 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
       firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
+          const deletedIds = getDeletedItemIds();
           if (!snapshot.empty) {
-            const items = snapshot.docs.map((d) => ({
+            const firestoreItems = snapshot.docs.map((d) => ({
               id: d.id,
               ...d.data(),
             })) as GalleryItem[];
-            saveLocalItems(items);
-            callback(items);
+
+            // Exclude any permanently deleted items
+            const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
+            const localItems = getLocalItems();
+            const mergedMap = new Map<string, GalleryItem>();
+            for (const item of validFirestore) {
+              mergedMap.set(item.id, item);
+            }
+            for (const item of localItems) {
+              if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
+                mergedMap.set(item.id, item);
+              }
+            }
+            const rawMerged = Array.from(mergedMap.values());
+            const healed = healAndSortGalleryItems(rawMerged);
+            if (hasDuplicateOrderIndices(rawMerged)) {
+              syncGalleryItemsOrder(healed);
+            } else {
+              saveLocalItems(healed);
+            }
+            callback(healed);
           } else {
-            callback(getLocalItems());
+            // Live Firestore collection is empty (all gallery items wiped)
+            saveLocalItems([]);
+            callback([]);
           }
         },
         (error) => {
@@ -183,12 +383,16 @@ export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void>
 
   if (isFirebaseConfigured && db) {
     try {
-      const batch = writeBatch(db);
-      for (const item of normalizedItems) {
-        const itemRef = doc(db, "gallery_items", item.id);
-        batch.set(itemRef, item, { merge: true });
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < normalizedItems.length; c += CHUNK_SIZE) {
+        const chunk = normalizedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const itemRef = doc(db, "gallery_items", item.id);
+          batch.update(itemRef, { orderIndex: item.orderIndex });
+        }
+        await batch.commit();
       }
-      await batch.commit();
     } catch (err) {
       console.warn("Firestore order sync pending rules authorization. Order saved in local storage:", err);
     }
@@ -203,17 +407,48 @@ export async function uploadImageFile(
   let webpDataUrl = "";
   let dimensions: { width?: number; height?: number } = {};
 
-  try {
-    const webpResult = await convertAndCompressToWebP(file, {
-      maxWidth: 1920,
-      maxHeight: 1920,
-      quality: 0.82,
-    });
-    processedFile = webpResult.file;
-    webpDataUrl = webpResult.dataUrl;
-    dimensions = { width: webpResult.width, height: webpResult.height };
-  } catch (convErr) {
-    console.warn("Client WebP conversion error, proceeding with original file:", convErr);
+  // If already WebP, avoid re-compressing to preserve original visual fidelity
+  if (file.type === "image/webp" || file.name.endsWith(".webp")) {
+    processedFile = file;
+    if (typeof window !== "undefined") {
+      try {
+        const bmp = await createImageBitmap(file);
+        dimensions = { width: bmp.width, height: bmp.height };
+        bmp.close();
+      } catch {
+        try {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise<void>((resolve) => {
+            img.onload = () => {
+              dimensions = { width: img.naturalWidth, height: img.naturalHeight };
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.src = url;
+          });
+        } catch {
+          // Ignore fallback errors
+        }
+      }
+    }
+  } else {
+    try {
+      const webpResult = await convertAndCompressToWebP(file, {
+        maxWidth: 2560,
+        maxHeight: 2560,
+        quality: 0.90,
+      });
+      processedFile = webpResult.file;
+      webpDataUrl = webpResult.dataUrl;
+      dimensions = { width: webpResult.width, height: webpResult.height };
+    } catch (convErr) {
+      console.warn("Client WebP conversion error, proceeding with original file:", convErr);
+    }
   }
 
   if (isFirebaseConfigured && storage) {
@@ -229,13 +464,33 @@ export async function uploadImageFile(
       return { imageUrl, storagePath, ...dimensions };
     } catch (storageErr) {
       console.warn(
-        "Firebase Storage upload failed or Cloud Storage is not enabled; using compressed WebP data URL fallback:",
+        "Firebase Storage upload failed or Cloud Storage is not enabled; using local media storage fallback:",
         storageErr
       );
     }
   }
 
-  // Fallback: return the compressed WebP data URL directly
+  // Server-side local upload fallback: saves to /uploads/<filename>.webp as a clean static asset
+  try {
+    const formData = new FormData();
+    formData.append("file", processedFile);
+    const res = await fetch("/api/admin/save-media", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success && data.imageUrl) {
+      return {
+        imageUrl: data.imageUrl,
+        storagePath: data.storagePath,
+        ...dimensions,
+      };
+    }
+  } catch (saveErr) {
+    console.warn("Local media save fallback notice:", saveErr);
+  }
+
+  // Fallback: return the compressed WebP data URL directly if server save fails
   if (webpDataUrl) {
     return {
       imageUrl: webpDataUrl,
@@ -259,12 +514,30 @@ export async function uploadImageFile(
   });
 }
 
+// Deep clean helper to remove any undefined properties that Firestore rejects
+function cleanFirestoreData<T extends Record<string, any>>(obj: T): Partial<T> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const nested = cleanFirestoreData(value);
+        if (Object.keys(nested).length > 0) {
+          cleaned[key] = nested;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned as Partial<T>;
+}
+
 // Add a new gallery item
 export async function createGalleryItem(
   itemData: Omit<GalleryItem, "id" | "createdAt" | "orderIndex">
 ): Promise<GalleryItem> {
   const currentItems = getLocalItems();
-  const newId = `item-${Date.now()}`;
+  const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const newItem: GalleryItem = {
     ...itemData,
     id: newId,
@@ -281,14 +554,72 @@ export async function createGalleryItem(
 
   if (isFirebaseConfigured && db) {
     try {
-      const docRef = doc(db, "gallery_items", newId);
-      await setDoc(docRef, updatedItems[0]);
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
+        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const docRef = doc(db, "gallery_items", item.id);
+          if (item.id === newId) {
+            batch.set(docRef, cleanFirestoreData(item));
+          } else {
+            batch.update(docRef, { orderIndex: item.orderIndex });
+          }
+        }
+        await batch.commit();
+      }
     } catch (err) {
-      console.warn("Firestore document write pending rules authorization. Item saved in local storage:", err);
+      console.warn("Firestore document write notice:", err);
     }
   }
 
   return updatedItems[0];
+}
+
+// Add multiple gallery items in one batch preserving sequence (maximum 10 at a time)
+export async function createMultipleGalleryItems(
+  itemsData: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">>
+): Promise<GalleryItem[]> {
+  const cappedData = itemsData.slice(0, 10);
+  const currentItems = getLocalItems();
+  const now = Date.now();
+  const newItems: GalleryItem[] = cappedData.map((data, idx) => ({
+    ...data,
+    id: `item-${now + idx}-${Math.random().toString(36).substring(2, 7)}`,
+    orderIndex: idx,
+    createdAt: new Date(now + idx * 10).toISOString(),
+  }));
+
+  const updatedItems = [...newItems, ...currentItems].map((item, idx) => ({
+    ...item,
+    orderIndex: idx,
+  }));
+
+  saveLocalItems(updatedItems);
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const newItemIds = new Set(newItems.map((n) => n.id));
+      const CHUNK_SIZE = 450;
+      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
+        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const item of chunk) {
+          const docRef = doc(db, "gallery_items", item.id);
+          if (newItemIds.has(item.id)) {
+            batch.set(docRef, cleanFirestoreData(item));
+          } else {
+            batch.update(docRef, { orderIndex: item.orderIndex });
+          }
+        }
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn("Firestore batch write notice:", err);
+    }
+  }
+
+  return updatedItems.slice(0, newItems.length);
 }
 
 // Update specific gallery item
@@ -305,33 +636,70 @@ export async function updateGalleryItem(
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", id);
-      await updateDoc(docRef, updates);
+      const cleaned = cleanFirestoreData(updates);
+      await updateDoc(docRef, cleaned);
     } catch (err) {
-      console.warn("Firestore update pending rules authorization. Item updated in local storage:", err);
+      console.warn("Firestore update notice:", err);
     }
   }
 }
 
-// Delete gallery item
-export async function deleteGalleryItem(id: string): Promise<void> {
+// Delete gallery item permanently (from local storage, server disk, Firebase Storage, and Firestore)
+export async function deleteGalleryItem(id: string, itemToDelete?: GalleryItem): Promise<void> {
+  // 1. Mark as permanently deleted in tombstones to prevent resurrection on sync
+  markItemAsDeleted(id);
+
+  // 2. Identify target item to extract image URL & storage path
   const currentItems = getLocalItems();
+  const targetItem = itemToDelete || currentItems.find((item) => item.id === id);
+
+  // 3. Purge immediately from local storage & in-memory cache
   const updatedItems = currentItems
     .filter((item) => item.id !== id)
     .map((item, idx) => ({ ...item, orderIndex: idx }));
   saveLocalItems(updatedItems);
 
+  // 4. Permanently delete media file from server disk (/public/uploads)
+  if (targetItem?.imageUrl || targetItem?.storagePath) {
+    try {
+      await fetch("/api/admin/delete-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: targetItem.imageUrl,
+          storagePath: targetItem.storagePath,
+        }),
+      });
+    } catch (mediaErr) {
+      console.warn("Could not delete local media file:", mediaErr);
+    }
+  }
+
+  // 5. Permanently delete from Firebase Cloud Storage if applicable
+  if (isFirebaseConfigured && storage && targetItem?.storagePath?.startsWith("gallery/")) {
+    try {
+      const storageRef = ref(storage, targetItem.storagePath);
+      await deleteObject(storageRef);
+    } catch (storageErr) {
+      console.warn("Could not delete Firebase Storage object:", storageErr);
+    }
+  }
+
+  // 6. Permanently delete document from Firestore
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", id);
       await deleteDoc(docRef);
+      await syncGalleryItemsOrder(updatedItems);
     } catch (err) {
-      console.warn("Firestore delete pending rules authorization. Item removed from local storage:", err);
+      console.warn("Firestore delete notice:", err);
     }
   }
 }
 
 // Reset gallery items to default seed
 export async function resetToDefaultSeed(): Promise<void> {
+  clearDeletedTombstones();
   saveLocalItems(INITIAL_GALLERY_ITEMS);
 
   if (isFirebaseConfigured && db) {

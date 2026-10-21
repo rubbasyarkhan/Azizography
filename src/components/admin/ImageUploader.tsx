@@ -2,8 +2,9 @@
 
 import React, { useState, useRef } from "react";
 import Image from "next/image";
-import { GalleryCategory } from "@/types/gallery";
-import { uploadImageFile, createGalleryItem } from "@/lib/gallery-service";
+import { GalleryCategory, GalleryItem } from "@/types/gallery";
+import { uploadImageFile, createGalleryItem, createMultipleGalleryItems } from "@/lib/gallery-service";
+import { getAllCategories, addCustomCategory, CategoryOption } from "@/lib/category-service";
 import {
   convertAndCompressToWebP,
   formatBytes,
@@ -18,15 +19,29 @@ import {
   Sliders,
   ArrowRight,
   ArrowLeft,
+  Copy,
+  Bookmark,
+  ExternalLink,
+  HelpCircle,
 } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface ImageUploaderProps {
   onSuccess: () => void;
   onCancel: () => void;
+  initialImportData?: {
+    imageUrl?: string;
+    imageUrls?: string[];
+    postUrl?: string;
+    caption?: string;
+  } | null;
 }
 
-export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProps) {
+export default function ImageUploader({
+  onSuccess,
+  onCancel,
+  initialImportData,
+}: ImageUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [conversionStats, setConversionStats] = useState<WebPConversionResult | null>(null);
@@ -41,6 +56,11 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<GalleryCategory>("people");
+  const [availableCategories, setAvailableCategories] = useState<CategoryOption[]>(() =>
+    getAllCategories()
+  );
+  const [isAddingNewCat, setIsAddingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
   const [artist, setArtist] = useState("");
   const [location, setLocation] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
@@ -59,7 +79,92 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [aperture, setAperture] = useState("f/2.8");
   const [shutter, setShutter] = useState("1/500s");
 
+  // Instagram Ingest State
+  const [instagramInputUrl, setInstagramInputUrl] = useState("");
+  const [fetchingInstagram, setFetchingInstagram] = useState(false);
+  const [instagramNotice, setInstagramNotice] = useState<string | null>(null);
+  const [bookmarkletCode, setBookmarkletCode] = useState<string>("");
+  const [copiedBookmarklet, setCopiedBookmarklet] = useState(false);
+
+  // Multi-photo Carousel State
+  const [carouselImages, setCarouselImages] = useState<string[]>([]);
+  const [selectedCarouselIndices, setSelectedCarouselIndices] = useState<number[]>([]);
+  const [activeCarouselIdx, setActiveCarouselIdx] = useState<number>(0);
+  const [batchImporting, setBatchImporting] = useState<boolean>(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bookmarkletLinkRef = useRef<HTMLAnchorElement>(null);
+
+  // Helper to extract clean titles, tags, and captions from Instagram posts
+  const parseInstagramCaption = (rawCaption: string) => {
+    const hashtags = Array.from(rawCaption.matchAll(/#([a-zA-Z0-9_]+)/g)).map((m) =>
+      m[1].toLowerCase()
+    );
+    const cleanCaption = rawCaption.replace(/(?:#[a-zA-Z0-9_]+\s*)+$/g, "").trim();
+    const firstLine = cleanCaption.split("\n")[0].replace(/#\w+/g, "").trim();
+    const cleanTitle = firstLine.slice(0, 48).trim() || "Instagram Photograph";
+    return { hashtags, cleanCaption, cleanTitle };
+  };
+
+  // Generate dynamic bookmarklet pointing to the current host (localhost in dev, domain in prod)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const origin = window.location.origin;
+      const code = `javascript:(async function(){try{var targetWin=window.open('','_blank');if(targetWin){try{targetWin.document.title='Azizography Importing...';targetWin.document.body.style.cssText='background:#09090b;color:#f4f4f5;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;';targetWin.document.body.innerHTML='<div style=\"text-align:center;padding:24px;max-width:440px\"><div style=\"font-size:18px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#fff;margin-bottom:8px\">AZIZOGRAPHY STUDIO</div><div style=\"font-size:13px;color:#a1a1aa;line-height:1.5;margin-bottom:20px\">Scanning Instagram carousel &amp; extracting high-res photos...</div><div style=\"width:32px;height:32px;border:3px solid #27272a;border-top-color:#e4e4e7;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto\"></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div>';}catch(e){}}document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role=\"dialog\"]')||document.querySelector('article')||document.querySelector('main')||document.body;for(var rw=0;rw<25;rw++){var prevBtn=root.querySelector('button[aria-label=\"Previous\"],button[aria-label*=\"Previous\"],button[aria-label=\"Go to previous slide\"],button[aria-label*=\"Précédent\"],button[aria-label*=\"Anterior\"],div[role=\"button\"][aria-label*=\"Previous\"],button:has(polyline[points*=\"8.5\"])');if(!prevBtn)break;prevBtn.click();await new Promise(function(r){setTimeout(r,50);});}await new Promise(function(r){setTimeout(r,60);});function getHighRes(img){var bestUrl='';var maxW=0;if(img.srcset){var re=/(https?:\\/\\/[^\\s]+)\\s+(\\d+)w/g;var m;while((m=re.exec(img.srcset))!==null){var w=parseInt(m[2],10);if(w>maxW){maxW=w;bestUrl=m[1];}}}if(bestUrl&&maxW>=640)return bestUrl;if(img.currentSrc&&!img.currentSrc.includes('150x150')&&!img.currentSrc.includes('240x240')&&!img.currentSrc.includes('320x320')){return img.currentSrc;}return bestUrl||img.currentSrc||img.src;}function isPostImg(img){var alt=(img.getAttribute('alt')||'').toLowerCase();if(alt.includes('profile picture')||alt.includes('profile photo'))return false;var w=img.naturalWidth||img.width||0;var h=img.naturalHeight||img.height||0;if(w>0&&w<240)return false;if(h>0&&h<240)return false;var s=img.src||img.currentSrc||'';if(!s.includes('cdninstagram')&&!s.includes('fbcdn'))return false;if(s.includes('/rsrc.php/')||s.includes('static.cdninstagram'))return false;return true;}var finalImgs=[];var idMap=new Map();function scan(){var imgs=Array.from(root.querySelectorAll('img')).filter(isPostImg);for(var i=0;i<imgs.length;i++){var u=getHighRes(imgs[i]);if(!u)continue;var keyMatch=u.match(/_([0-9]{12,22})_n\\./);var key=keyMatch?keyMatch[1]:u.split('?')[0];var isThumb=u.includes('150x150')||u.includes('240x240')||u.includes('320x320');if(!idMap.has(key)){idMap.set(key,u);finalImgs.push(u);}else if(!isThumb&&(idMap.get(key).includes('150x150')||idMap.get(key).includes('240x240')||idMap.get(key).includes('320x320'))){var oldIdx=finalImgs.indexOf(idMap.get(key));if(oldIdx!==-1)finalImgs[oldIdx]=u;idMap.set(key,u);}}}scan();for(var step=0;step<25;step++){if(finalImgs.length>=10)break;var nextBtn=root.querySelector('button[aria-label=\"Next\"],button[aria-label*=\"Next\"],button[aria-label=\"Go to next slide\"],button[aria-label*=\"Suivant\"],button[aria-label*=\"Siguiente\"],button:has(polyline[points*=\"16.5\"]),div[role=\"button\"][aria-label*=\"Next\"],button[aria-label*=\"Next slide\"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,220);});scan();if(finalImgs.length>=10)break;}if(!finalImgs.length){if(targetWin&&!targetWin.closed)targetWin.close();alert('Azizography: Open an Instagram post modal or page first!');return;}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var alts=Array.from(root.querySelectorAll('img[alt]'));for(var k=0;k<alts.length;k++){var txt=alts[k].getAttribute('alt')||'';if(txt&&!txt.startsWith('Photo by')&&!txt.startsWith('May be')){c=txt;break;}}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(finalImgs.slice(0, 10)));var finalUrl='${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(finalImgs[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c);if(targetWin&&!targetWin.closed){targetWin.location.replace(finalUrl);}else{window.open(finalUrl,'_blank')||(window.location.href=finalUrl);}}catch(e){if(typeof targetWin!=='undefined'&&targetWin&&!targetWin.closed)targetWin.close();alert('Azizography Importer Error: '+e.message);}})();`;
+      setBookmarkletCode(code);
+    }
+  }, []);
+
+  // Attach href directly via DOM element to avoid React's JSX javascript: protocol security check
+  React.useEffect(() => {
+    if (bookmarkletLinkRef.current && bookmarkletCode) {
+      bookmarkletLinkRef.current.setAttribute("href", bookmarkletCode);
+    }
+  }, [bookmarkletCode]);
+
+  // Handle incoming data from Bookmarklet redirect or parent prop
+  React.useEffect(() => {
+    if (initialImportData) {
+      if (initialImportData.postUrl) {
+        setInstagramUrl(initialImportData.postUrl);
+      }
+      if (initialImportData.caption) {
+        const { hashtags, cleanCaption, cleanTitle } = parseInstagramCaption(
+          initialImportData.caption
+        );
+        setDescription(cleanCaption);
+        if (!title) {
+          setTitle(cleanTitle);
+          if (!seriesOrProject && initialImportData.imageUrls && initialImportData.imageUrls.length > 1) {
+            setSeriesOrProject(cleanTitle);
+          }
+        }
+        if (hashtags.length > 0 && !tagsString) {
+          setTagsString(hashtags.join(", "));
+        }
+      }
+
+      if (initialImportData.imageUrls && initialImportData.imageUrls.length > 0) {
+        // Enforce maximum 10 images at a time for bulk import
+        const cappedImages = initialImportData.imageUrls.slice(0, 10);
+        setCarouselImages(cappedImages);
+        setSelectedCarouselIndices(cappedImages.map((_, i) => i));
+        setActiveCarouselIdx(0);
+        const firstImg = cappedImages[0];
+        setInstagramInputUrl(firstImg);
+        handleInstagramImport(firstImg, initialImportData.postUrl, initialImportData.caption);
+        if (initialImportData.imageUrls.length > 10) {
+          setInstagramNotice("✨ Carousel post imported (limited to maximum 10 photographs at a time).");
+        }
+      } else if (initialImportData.imageUrl) {
+        setCarouselImages([initialImportData.imageUrl]);
+        setSelectedCarouselIndices([0]);
+        setInstagramInputUrl(initialImportData.imageUrl);
+        handleInstagramImport(initialImportData.imageUrl, initialImportData.postUrl, initialImportData.caption);
+      }
+    }
+  }, [initialImportData]);
 
   const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -71,9 +176,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
     try {
       const result = await convertAndCompressToWebP(file, {
-        maxWidth: 1920,
-        maxHeight: 1920,
-        quality: 0.82,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        quality: 0.90,
       });
 
       setSelectedFile(result.file);
@@ -101,27 +206,205 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
+  const handleInstagramImport = async (
+    urlToFetch?: string,
+    explicitPostUrl?: string,
+    explicitCaption?: string
+  ) => {
+    const targetUrl = (urlToFetch || instagramInputUrl).trim();
+    if (!targetUrl) return;
+
+    setFetchingInstagram(true);
+    setError(null);
+    setInstagramNotice(null);
+
+    try {
+      const res = await fetch("/api/admin/instagram-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          postUrl: explicitPostUrl || instagramUrl || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.dataUrl) {
+        const blob = await fetch(data.dataUrl).then((r) => r.blob());
+        const file = new File([blob], `instagram_${Date.now()}.jpg`, { type: blob.type || "image/jpeg" });
+
+        await handleFileSelect(file);
+
+        if (data.instagramUrl || explicitPostUrl) {
+          setInstagramUrl(data.instagramUrl || explicitPostUrl || "");
+        }
+        const cap = explicitCaption || data.caption;
+        if (cap) {
+          setDescription((prev) => prev || cap);
+          setTitle((prev) => {
+            if (prev) return prev;
+            const cleanTitle = cap.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 45);
+            return cleanTitle || "Untitled";
+          });
+        }
+        setInstagramNotice("✨ Instagram photo imported and optimized to WebP! Review your title and details below.");
+      } else if (data.requiresDirectImage) {
+        if (data.instagramUrl || explicitPostUrl) {
+          setInstagramUrl(data.instagramUrl || explicitPostUrl || "");
+        }
+        setInstagramNotice(data.message);
+      } else {
+        setError(data.message || "Could not import from Instagram. Try copying the image directly.");
+      }
+    } catch (err: unknown) {
+      const e = err as Error;
+      setError(e.message || "Failed to fetch from Instagram.");
+    } finally {
+      setFetchingInstagram(false);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+  const handleSelectCarouselImage = async (url: string, index: number) => {
+    setActiveCarouselIdx(index);
+    setInstagramInputUrl(url);
+    await handleInstagramImport(url, instagramUrl, description);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      setError("Please enter a title for the photograph.");
+  const handleBatchImportAll = async () => {
+    if (carouselImages.length === 0) return;
+    setBatchImporting(true);
+    setError(null);
+    const targets = carouselImages
+      .filter((_, i) => selectedCarouselIndices.includes(i))
+      .slice(0, 10);
+    if (targets.length === 0) {
+      setError("Please select at least one photograph from the carousel.");
+      setBatchImporting(false);
       return;
     }
+    setBatchProgress({ current: 0, total: targets.length });
 
-    if (!selectedFile && !externalUrl.trim()) {
-      setError("Please upload an image file or provide an image URL.");
-      return;
+    try {
+      const { hashtags, cleanCaption, cleanTitle } = parseInstagramCaption(
+        description || title || ""
+      );
+      const baseTitle = title.trim() || cleanTitle || "Instagram Photograph";
+      const baseSeries = seriesOrProject.trim() || (targets.length > 1 ? baseTitle : undefined);
+      const finalTags = Array.from(
+        new Set([
+          ...tagsString
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean),
+          ...hashtags,
+        ])
+      );
+
+      // 1. Parallel fetch all selected image URLs from our API
+      const res = await fetch("/api/admin/instagram-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: targets, postUrl: instagramUrl || undefined }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.items || data.items.length === 0) {
+        throw new Error(data.message || "Failed to download carousel photos.");
+      }
+
+      const itemsToCreate: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">> = [];
+
+      // 2. Process, compress to WebP at high fidelity (quality: 0.90, max: 2560px), and prepare batch
+      for (let i = 0; i < data.items.length; i++) {
+        setBatchProgress({ current: i + 1, total: data.items.length });
+        const item = data.items[i];
+
+        const blob = await fetch(item.dataUrl).then((r) => r.blob());
+        const rawFile = new File([blob], `carousel_${Date.now()}_${i + 1}.jpg`, {
+          type: blob.type || "image/jpeg",
+        });
+
+        const webpResult = await convertAndCompressToWebP(rawFile, {
+          maxWidth: 2560,
+          maxHeight: 2560,
+          quality: 0.90,
+        });
+
+        const uploadResult = await uploadImageFile(webpResult.file);
+
+        const ratio = webpResult.width / webpResult.height;
+        let itemAspect: "portrait" | "landscape" | "square" | "tall" = "portrait";
+        if (ratio > 1.25) itemAspect = "landscape";
+        else if (ratio < 0.65) itemAspect = "tall";
+        else if (ratio >= 0.88 && ratio <= 1.12) itemAspect = "square";
+
+        const itemTitle = data.items.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
+
+        const cleanExif: Record<string, string> = {};
+        if (camera.trim()) cleanExif.camera = camera.trim();
+        if (lens.trim()) cleanExif.lens = lens.trim();
+        if (iso.trim()) cleanExif.iso = iso.trim();
+        if (aperture.trim()) cleanExif.aperture = aperture.trim();
+        if (shutter.trim()) cleanExif.shutter = shutter.trim();
+        const hasExif = Object.keys(cleanExif).length > 0;
+
+        itemsToCreate.push({
+          title: itemTitle,
+          description: cleanCaption || undefined,
+          seriesOrProject: baseSeries,
+          category: category || "people",
+          imageUrl: uploadResult.imageUrl,
+          storagePath: uploadResult.storagePath,
+          width: uploadResult.width || webpResult.width,
+          height: uploadResult.height || webpResult.height,
+          blurDataUrl: webpResult.blurDataUrl,
+          isFeatured: i === 0 ? isFeatured : false,
+          isVisible: true,
+          isIrisItem: i === 0 ? isIrisItem : false,
+          isFooterTrailItem: false,
+          artist: artist.trim() || undefined,
+          location: location.trim() || undefined,
+          year: year.trim() || undefined,
+          aspectRatio: itemAspect,
+          tags: finalTags,
+          instagramUrl: instagramUrl.trim() || undefined,
+          exif: hasExif ? cleanExif : undefined,
+        });
+      }
+
+      await createMultipleGalleryItems(itemsToCreate);
+
+      setInstagramNotice(
+        `🎉 Successfully imported all ${itemsToCreate.length} photographs from your Instagram carousel!`
+      );
+      setTimeout(() => {
+        onSuccess();
+      }, 1200);
+    } catch (err: unknown) {
+      const e = err as Error;
+      setError(e.message || "Batch import failed.");
+    } finally {
+      setBatchImporting(false);
+      setBatchProgress(null);
+    }
+  };
+
+  const handlePublishSingle = async () => {
+    // All fields are optional. Gracefully resolve title if left blank.
+    let finalTitle = title.trim();
+    if (!finalTitle) {
+      if (seriesOrProject.trim()) {
+        finalTitle = seriesOrProject.trim();
+      } else if (description.trim()) {
+        const { cleanTitle } = parseInstagramCaption(description);
+        finalTitle = cleanTitle || description.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 48);
+      }
+      if (!finalTitle && artist.trim()) {
+        finalTitle = `${artist.trim()} Photograph`;
+      }
+      if (!finalTitle) {
+        finalTitle = "Untitled Photograph";
+      }
     }
 
     setUploading(true);
@@ -139,9 +422,34 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         finalStoragePath = uploadResult.storagePath;
         if (uploadResult.width) itemWidth = uploadResult.width;
         if (uploadResult.height) itemHeight = uploadResult.height;
-      } else {
+      } else if (externalUrl.trim()) {
         finalImageUrl = externalUrl.trim();
         finalStoragePath = "external-url";
+      } else if (previewUrl) {
+        if (previewUrl.startsWith("data:")) {
+          try {
+            const blob = await fetch(previewUrl).then((r) => r.blob());
+            const file = new File([blob], `imported_${Date.now()}.webp`, { type: "image/webp" });
+            const uploadResult = await uploadImageFile(file);
+            finalImageUrl = uploadResult.imageUrl;
+            finalStoragePath = uploadResult.storagePath;
+            if (uploadResult.width) itemWidth = uploadResult.width;
+            if (uploadResult.height) itemHeight = uploadResult.height;
+          } catch {
+            finalImageUrl = previewUrl;
+            finalStoragePath = "preview-data";
+          }
+        } else {
+          finalImageUrl = previewUrl;
+          finalStoragePath = "preview-url";
+        }
+      } else if (instagramInputUrl.trim()) {
+        finalImageUrl = instagramInputUrl.trim();
+        finalStoragePath = "instagram-url";
+      } else {
+        setError("Please select an image or import from Instagram.");
+        setUploading(false);
+        return;
       }
 
       const tags = tagsString
@@ -149,11 +457,19 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const cleanExif: Record<string, string> = {};
+      if (camera.trim()) cleanExif.camera = camera.trim();
+      if (lens.trim()) cleanExif.lens = lens.trim();
+      if (iso.trim()) cleanExif.iso = iso.trim();
+      if (aperture.trim()) cleanExif.aperture = aperture.trim();
+      if (shutter.trim()) cleanExif.shutter = shutter.trim();
+      const hasExif = Object.keys(cleanExif).length > 0;
+
       await createGalleryItem({
-        title: title.trim(),
+        title: finalTitle,
         description: description.trim() || undefined,
         seriesOrProject: seriesOrProject.trim() || undefined,
-        category,
+        category: category || "people",
         imageUrl: finalImageUrl,
         storagePath: finalStoragePath,
         width: itemWidth,
@@ -168,24 +484,76 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         year: year.trim() || undefined,
         aspectRatio,
         instagramUrl: instagramUrl.trim() || undefined,
-        exif: {
-          camera,
-          lens,
-          iso,
-          aperture,
-          shutter,
-        },
+        exif: hasExif ? cleanExif : undefined,
         tags: tags.length > 0 ? tags : undefined,
       });
 
       onSuccess();
     } catch (err: unknown) {
       const e = err as Error;
-      setError(e.message || "Failed to upload image. Please try again.");
+      setError(e.message || "Failed to publish photograph.");
     } finally {
       setUploading(false);
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // If carousel with multiple selected photos, publish ALL selected photos together!
+    if (carouselImages.length > 1 && selectedCarouselIndices.length > 1) {
+      await handleBatchImportAll();
+      return;
+    }
+
+    // Otherwise, publish the single photograph
+    await handlePublishSingle();
+  };
+
+  React.useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      // 1. Check if user pasted an image file from clipboard (e.g. copied from Instagram)
+      if (e.clipboardData?.items) {
+        for (const item of Array.from(e.clipboardData.items)) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              await handleFileSelect(file);
+              return;
+            }
+          }
+        }
+      }
+
+      // 2. Check if user pasted an Instagram URL
+      const text = e.clipboardData?.getData("text")?.trim();
+      if (text && (text.includes("instagram.com") || text.includes("cdninstagram.com"))) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        if (activeTag !== "input" && activeTag !== "textarea") {
+          e.preventDefault();
+          setInstagramInputUrl(text);
+          handleInstagramImport(text);
+        }
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [description]);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+
 
   return (
     <div className="bg-[#FAF7F2] border border-[#DDD6CA] p-6 sm:p-8 text-[#1C1917] rounded-2xl shadow-xs font-admin">
@@ -215,6 +583,241 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
           {error}
         </div>
       )}
+
+      {/* Instagram Fast Ingest Card */}
+      <div className="mb-6 p-4 sm:p-5 bg-gradient-to-br from-pink-50/80 via-[#FAF7F2] to-purple-50/60 border border-pink-200/90 rounded-2xl shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-pink-200/50">
+          <div className="flex items-center gap-2">
+            <InstagramIcon className="w-5 h-5 text-pink-600 shrink-0" />
+            <div>
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-stone-900 font-sans block">
+                Instagram Direct Importer
+              </span>
+              <span className="text-[11px] text-stone-500 font-sans">
+                Permanent WebP pipeline &bull; No manual image re-downloads needed
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-stone-600 bg-white/80 px-2.5 py-1 rounded-full border border-pink-200 shadow-xs">
+            Ctrl+V Image Supported
+          </span>
+        </div>
+
+        {/* Option A: 1-Click Browser Bookmarklet (Recommended) */}
+        <div className="p-3.5 bg-white/90 border border-pink-100 rounded-xl space-y-2.5 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-bold uppercase tracking-wide rounded">
+                Recommended &bull; 1-Click
+              </span>
+              <span className="text-xs font-bold text-stone-900">
+                Instagram Importer Bookmarklet
+              </span>
+            </div>
+
+            {bookmarkletCode && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(bookmarkletCode);
+                    setCopiedBookmarklet(true);
+                    setTimeout(() => setCopiedBookmarklet(false), 2500);
+                  } catch {
+                    alert("Could not copy to clipboard. Drag the button directly to your bookmarks bar.");
+                  }
+                }}
+                className="text-[11px] font-semibold text-stone-600 hover:text-stone-900 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                {copiedBookmarklet ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Script Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Bookmarklet Code</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-stone-600 leading-relaxed">
+            Instagram blocks outside servers from opening post links. To import with 1 click, drag this button to your browser bookmarks bar once:
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {bookmarkletCode ? (
+              <a
+                ref={bookmarkletLinkRef}
+                onClick={(e) => {
+                  // If clicked inside the admin panel, explain how to use it
+                  e.preventDefault();
+                  alert(
+                    "👉 Drag this button up to your browser Bookmarks Bar (Ctrl+Shift+B to show bookmarks bar).\n\nThen whenever you view any of your photos on Instagram, just click that bookmark! It will automatically load the high-res photo and caption into this uploader."
+                  );
+                }}
+                title="Drag to your Bookmarks Bar!"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-sans text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-grab active:cursor-grabbing select-none"
+              >
+                <Bookmark className="w-3.5 h-3.5 fill-current" />
+                <span>📸 Import to Azizography</span>
+              </a>
+            ) : null}
+
+            <span className="text-[11px] text-stone-500 italic">
+              (Drag button to bookmarks bar &rarr; Open Instagram post &rarr; Click bookmark)
+            </span>
+          </div>
+        </div>
+
+        {/* Multi-Photo Carousel Strip */}
+        {carouselImages.length > 1 && (
+          <div className="p-4 bg-white/95 border border-purple-200/90 rounded-xl space-y-3 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wide rounded">
+                  Carousel Post
+                </span>
+                <span className="text-xs font-bold text-stone-900">
+                  {carouselImages.length} Photographs Found &bull; {selectedCarouselIndices.length}/10 Selected (Max 10)
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={batchImporting || converting || selectedCarouselIndices.length === 0}
+                onClick={handleBatchImportAll}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 text-white font-sans text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                {batchImporting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>
+                      Importing {batchProgress ? `(${batchProgress.current}/${batchProgress.total})` : "..."}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>⚡ Batch Import Selected ({selectedCarouselIndices.length} Photos, Max 10)</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="text-[11px] text-stone-600">
+              Click any photo to preview & customize individually, check/uncheck to choose which slides to import, or click{" "}
+              <strong>Batch Import Selected</strong> to publish them all as a connected series!
+            </p>
+
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-1 pt-1">
+              {carouselImages.map((imgUrl, idx) => {
+                const isActive = idx === activeCarouselIdx;
+                const isChecked = selectedCarouselIndices.includes(idx);
+                return (
+                  <div key={idx} className="relative group shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectCarouselImage(imgUrl, idx)}
+                      className={`relative w-16 h-16 sm:w-20 sm:h-20 block rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                        isActive
+                          ? "border-purple-600 ring-2 ring-purple-300 scale-102 shadow-sm"
+                          : "border-stone-200 hover:border-purple-400 opacity-80 hover:opacity-100"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={`Carousel slide ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[9px] font-mono font-bold px-1 rounded">
+                        #{idx + 1}
+                      </span>
+                    </button>
+                    {/* Checkbox badge to toggle inclusion in batch */}
+                    <button
+                      type="button"
+                      aria-label={isChecked ? `Exclude slide #${idx + 1}` : `Include slide #${idx + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCarouselIndices((prev) => {
+                          if (isChecked) {
+                            return prev.filter((i) => i !== idx);
+                          } else {
+                            if (prev.length >= 10) {
+                              setError("Maximum 10 images can be imported at a time.");
+                              return prev;
+                            }
+                            setError(null);
+                            return [...prev, idx];
+                          }
+                        });
+                      }}
+                      className={`absolute top-1 left-1 w-4 h-4 rounded flex items-center justify-center transition-all cursor-pointer shadow-xs ${
+                        isChecked
+                          ? "bg-purple-600 text-white"
+                          : "bg-white/80 border border-stone-300 text-transparent"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3 h-3 fill-current" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Option B: Direct URL or Image Address Ingest */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-700">
+            Or Paste Image Address / Post CDN Link:
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={instagramInputUrl}
+              onChange={(e) => setInstagramInputUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleInstagramImport();
+                }
+              }}
+              placeholder="https://scontent...cdninstagram.com/... or direct image link"
+              className="flex-1 px-3.5 py-2 text-xs sm:text-sm bg-white border border-[#DDD6CA] focus:border-pink-500 focus:outline-none rounded-lg text-stone-900 placeholder:text-stone-400 font-mono"
+            />
+            <button
+              type="button"
+              disabled={fetchingInstagram || !instagramInputUrl.trim()}
+              onClick={() => handleInstagramImport()}
+              className="px-4 py-2 bg-[#1C1917] hover:bg-stone-800 disabled:opacity-50 text-white font-sans text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            >
+              {fetchingInstagram ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Importing...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Fetch Image</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {instagramNotice && (
+          <div className="p-3 bg-white/95 border border-pink-200 rounded-xl text-xs font-sans text-stone-800 leading-relaxed flex items-start gap-2 shadow-xs">
+            <Sparkles className="w-4 h-4 text-pink-600 shrink-0 mt-0.5" />
+            <span>{instagramNotice}</span>
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Dropzone & Preview Row */}
@@ -267,6 +870,7 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                     src={previewUrl || externalUrl}
                     alt="Preview"
                     fill
+                    sizes="(max-width: 768px) 100vw, 500px"
                     className="object-contain"
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -338,22 +942,23 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
           {/* Right Column: Metadata Fields */}
           <div className="lg:col-span-7 space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Photograph Title *
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Photograph Title</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
-                required
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. After Hours Arena Tour"
+                placeholder="e.g. After Hours Arena Tour (leave blank to auto-generate)"
                 className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Series / Project / Story (Appears in Public Sidebar)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Series / Project / Story (Appears in Public Sidebar)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"
@@ -365,8 +970,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Description / Editorial Notes
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Description / Caption / Editorial Notes</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <textarea
                 rows={2}
@@ -399,25 +1005,69 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Category *
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Category</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as GalleryCategory)}
+                  value={isAddingNewCat ? "__new__" : category}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setIsAddingNewCat(true);
+                    } else {
+                      setIsAddingNewCat(false);
+                      setCategory(e.target.value as GalleryCategory);
+                    }
+                  }}
                   className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
                 >
-                  <option value="people">Portraits & People</option>
-                  <option value="concerts">Live & Concerts</option>
-                  <option value="singers">Vocalists & Singers</option>
-                  <option value="weddings">Weddings & Ceremonies</option>
-                  <option value="events">Festivals & Events</option>
+                  {availableCategories.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add New Category...</option>
                 </select>
+
+                {isAddingNewCat && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCatInput}
+                      onChange={(e) => setNewCatInput(e.target.value)}
+                      placeholder="e.g. Street Photography"
+                      className="flex-1 bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-xs sm:text-sm text-[#1C1917] rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newCatInput.trim()) return;
+                        const added = await addCustomCategory(newCatInput.trim());
+                        setAvailableCategories(getAllCategories());
+                        setCategory(added.key);
+                        setIsAddingNewCat(false);
+                        setNewCatInput("");
+                      }}
+                      className="px-3 py-1.5 bg-[#1C1917] text-white text-xs font-semibold rounded-lg hover:bg-stone-800"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewCat(false)}
+                      className="px-2 py-1.5 text-stone-500 hover:text-stone-800 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Aspect Ratio
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Aspect Ratio</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
                   value={aspectRatio}
@@ -436,8 +1086,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Artist / Subject
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Artist / Subject</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -449,8 +1100,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Location
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Location</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -462,8 +1114,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Year
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Year</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -476,8 +1129,9 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Tags (comma separated)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Tags (comma separated)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"
@@ -610,29 +1264,62 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-5 border-t border-[#DDD6CA]">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-5 py-2.5 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={uploading || converting}
-            className="px-6 py-2.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors disabled:opacity-50 cursor-pointer rounded-lg shadow-sm"
-          >
-            {uploading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
-                <span>Publishing to Archive...</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-[#DDD6CA]">
+          <div className="text-xs text-stone-500">
+            {carouselImages.length > 1 ? (
+              <span className="font-semibold text-purple-800">
+                📸 Carousel post: {selectedCarouselIndices.length} of {carouselImages.length} photographs selected (Max 10 at a time)
               </span>
             ) : (
-              <span>Publish Photograph</span>
+              <span>All metadata fields are optional</span>
             )}
-          </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-5 py-2.5 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+
+            {carouselImages.length > 1 && selectedCarouselIndices.length > 1 && (
+              <button
+                type="button"
+                disabled={uploading || converting || batchImporting}
+                onClick={handlePublishSingle}
+                className="px-4 py-2.5 bg-stone-200 hover:bg-stone-300 text-stone-800 text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+                title="Publish only the currently viewed photograph"
+              >
+                Publish Only Photo #{activeCarouselIdx + 1}
+              </button>
+            )}
+
+            <button
+              type="submit"
+              disabled={uploading || converting || batchImporting}
+              className="px-6 py-2.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors disabled:opacity-50 cursor-pointer rounded-lg shadow-sm"
+            >
+              {batchImporting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
+                  <span>
+                    Publishing Carousel {batchProgress ? `(${batchProgress.current}/${batchProgress.total})` : "..."}
+                  </span>
+                </span>
+              ) : uploading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
+                  <span>Publishing to Archive...</span>
+                </span>
+              ) : carouselImages.length > 1 && selectedCarouselIndices.length > 1 ? (
+                <span>Publish {Math.min(selectedCarouselIndices.length, 10)} Photographs (Max 10)</span>
+              ) : (
+                <span>Publish Photograph</span>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </div>

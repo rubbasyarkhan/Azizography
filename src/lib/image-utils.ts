@@ -97,10 +97,10 @@ export async function convertAndCompressToWebP(
     throw new Error("convertAndCompressToWebP can only be run in the browser");
   }
 
-  let maxWidth = options?.maxWidth || 1920;
-  let maxHeight = options?.maxHeight || 1920;
-  let quality = typeof options?.quality === "number" ? options?.quality : 0.82;
-  const maxSizeBytes = options?.maxSizeBytes || 480 * 1024; // 480 KB
+  let maxWidth = options?.maxWidth || 2560;
+  let maxHeight = options?.maxHeight || 2560;
+  let quality = typeof options?.quality === "number" ? options?.quality : 0.90;
+  const maxSizeBytes = options?.maxSizeBytes || 5 * 1024 * 1024; // 5 MB high-fidelity limit
 
   let originalSize = 0;
   let filename = options?.filename || "photograph.webp";
@@ -177,16 +177,15 @@ export async function convertAndCompressToWebP(
 
   let blob = await encodeBlob(quality);
 
-  // Adaptive compression loop: if image exceeds maxSizeBytes (e.g. 480KB), tune down quality & scale
+  // Adaptive compression loop: only tune down if file exceeds 5MB
   let attempts = 0;
   while (blob.size > maxSizeBytes && attempts < 3) {
     attempts++;
-    quality = Math.max(0.60, quality - 0.08);
+    quality = Math.max(0.78, quality - 0.05);
 
-    // If still large after 1st attempt, downscale canvas slightly (e.g. 1600px max)
-    if (attempts >= 2 && (targetWidth > 1440 || targetHeight > 1440)) {
-      targetWidth = Math.round(targetWidth * 0.88);
-      targetHeight = Math.round(targetHeight * 0.88);
+    if (attempts >= 2 && (targetWidth > 2048 || targetHeight > 2048)) {
+      targetWidth = Math.round(targetWidth * 0.90);
+      targetHeight = Math.round(targetHeight * 0.90);
       canvas.width = targetWidth;
       canvas.height = targetHeight;
       ctx.imageSmoothingEnabled = true;
