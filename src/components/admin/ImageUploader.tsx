@@ -80,6 +80,7 @@ export default function ImageUploader({
   const [copiedBookmarklet, setCopiedBookmarklet] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bookmarkletLinkRef = useRef<HTMLAnchorElement>(null);
 
   // Generate dynamic bookmarklet pointing to the current host (localhost in dev, domain in prod)
   React.useEffect(() => {
@@ -89,6 +90,13 @@ export default function ImageUploader({
       setBookmarkletCode(code);
     }
   }, []);
+
+  // Attach href directly via DOM element to avoid React's JSX javascript: protocol security check
+  React.useEffect(() => {
+    if (bookmarkletLinkRef.current && bookmarkletCode) {
+      bookmarkletLinkRef.current.setAttribute("href", bookmarkletCode);
+    }
+  }, [bookmarkletCode]);
 
   // Handle incoming data from Bookmarklet redirect or parent prop
   React.useEffect(() => {
@@ -421,7 +429,7 @@ export default function ImageUploader({
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {bookmarkletCode ? (
               <a
-                href={bookmarkletCode}
+                ref={bookmarkletLinkRef}
                 onClick={(e) => {
                   // If clicked inside the admin panel, explain how to use it
                   e.preventDefault();
