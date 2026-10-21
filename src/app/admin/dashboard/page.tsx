@@ -37,6 +37,7 @@ function AdminDashboardContent() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [importData, setImportData] = useState<{
     imageUrl?: string;
+    imageUrls?: string[];
     postUrl?: string;
     caption?: string;
   } | null>(null);
@@ -46,13 +47,26 @@ function AdminDashboardContent() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const rawImgs = params.get("import_imgs");
       const img = params.get("import_img");
       const post = params.get("import_post");
       const caption = params.get("import_caption");
 
-      if (img) {
+      let parsedImgs: string[] = [];
+      if (rawImgs) {
+        try {
+          parsedImgs = JSON.parse(rawImgs);
+        } catch {
+          parsedImgs = rawImgs.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      } else if (img) {
+        parsedImgs = [img];
+      }
+
+      if (parsedImgs.length > 0) {
         setImportData({
-          imageUrl: img,
+          imageUrl: parsedImgs[0],
+          imageUrls: parsedImgs,
           postUrl: post || undefined,
           caption: caption || undefined,
         });
