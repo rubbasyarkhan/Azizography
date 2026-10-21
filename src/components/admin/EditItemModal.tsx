@@ -10,7 +10,7 @@ import {
 import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface EditItemModalProps {
-  item: GalleryItem | null;
+  item: GalleryItem;
   onClose: () => void;
   onSave: (id: string, updates: Partial<GalleryItem>) => void;
   onDelete: (id: string) => void;
@@ -22,8 +22,6 @@ export default function EditItemModal({
   onSave,
   onDelete,
 }: EditItemModalProps) {
-  if (!item) return null;
-
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description || "");
   const [seriesOrProject, setSeriesOrProject] = useState(item.seriesOrProject || "");
@@ -148,6 +146,7 @@ export default function EditItemModal({
                 src={item.imageUrl}
                 alt={item.title}
                 fill
+                sizes="80px"
                 className="object-cover"
               />
             </div>

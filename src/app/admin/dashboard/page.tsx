@@ -321,12 +321,15 @@ function AdminDashboardContent() {
       />
 
       {/* Edit Item Modal */}
-      <EditItemModal
-        item={editingItem}
-        onClose={() => setEditingItem(null)}
-        onSave={handleSaveEdit}
-        onDelete={handleDeleteItem}
-      />
+      {editingItem && (
+        <EditItemModal
+          key={editingItem.id}
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSave={handleSaveEdit}
+          onDelete={handleDeleteItem}
+        />
+      )}
     </div>
   );
 }

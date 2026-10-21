@@ -758,6 +758,7 @@ function DndBoard({
                   src={activeItem.imageUrl}
                   alt={activeItem.title}
                   fill
+                  sizes="70px"
                   className="object-cover"
                 />
               </div>
