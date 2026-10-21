@@ -242,17 +242,22 @@ export async function uploadImageFile(
   let webpDataUrl = "";
   let dimensions: { width?: number; height?: number } = {};
 
-  try {
-    const webpResult = await convertAndCompressToWebP(file, {
-      maxWidth: 1920,
-      maxHeight: 1920,
-      quality: 0.82,
-    });
-    processedFile = webpResult.file;
-    webpDataUrl = webpResult.dataUrl;
-    dimensions = { width: webpResult.width, height: webpResult.height };
-  } catch (convErr) {
-    console.warn("Client WebP conversion error, proceeding with original file:", convErr);
+  // If already WebP, avoid re-compressing to preserve original visual fidelity
+  if (file.type === "image/webp" || file.name.endsWith(".webp")) {
+    processedFile = file;
+  } else {
+    try {
+      const webpResult = await convertAndCompressToWebP(file, {
+        maxWidth: 2560,
+        maxHeight: 2560,
+        quality: 0.90,
+      });
+      processedFile = webpResult.file;
+      webpDataUrl = webpResult.dataUrl;
+      dimensions = { width: webpResult.width, height: webpResult.height };
+    } catch (convErr) {
+      console.warn("Client WebP conversion error, proceeding with original file:", convErr);
+    }
   }
 
   if (isFirebaseConfigured && storage) {
@@ -341,7 +346,7 @@ export async function createGalleryItem(
   itemData: Omit<GalleryItem, "id" | "createdAt" | "orderIndex">
 ): Promise<GalleryItem> {
   const currentItems = getLocalItems();
-  const newId = `item-${Date.now()}`;
+  const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const newItem: GalleryItem = {
     ...itemData,
     id: newId,
@@ -367,6 +372,43 @@ export async function createGalleryItem(
   }
 
   return updatedItems[0];
+}
+
+// Add multiple gallery items in one batch preserving sequence
+export async function createMultipleGalleryItems(
+  itemsData: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">>
+): Promise<GalleryItem[]> {
+  const currentItems = getLocalItems();
+  const now = Date.now();
+  const newItems: GalleryItem[] = itemsData.map((data, idx) => ({
+    ...data,
+    id: `item-${now + idx}-${Math.random().toString(36).substring(2, 7)}`,
+    orderIndex: idx,
+    createdAt: new Date(now + idx * 10).toISOString(),
+  }));
+
+  const updatedItems = [...newItems, ...currentItems].map((item, idx) => ({
+    ...item,
+    orderIndex: idx,
+  }));
+
+  saveLocalItems(updatedItems);
+
+  if (isFirebaseConfigured && db) {
+    try {
+      const batch = writeBatch(db);
+      for (const item of newItems) {
+        const docRef = doc(db, "gallery_items", item.id);
+        const cleaned = cleanFirestoreData(item);
+        batch.set(docRef, cleaned);
+      }
+      await batch.commit();
+    } catch (err) {
+      console.warn("Firestore batch write notice:", err);
+    }
+  }
+
+  return newItems;
 }
 
 // Update specific gallery item

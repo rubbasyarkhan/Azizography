@@ -8,12 +8,14 @@ export async function POST(req: NextRequest) {
     // Batch direct images handler (downloads multiple carousel images in parallel)
     if (Array.isArray(urls) && urls.length > 0) {
       const items = await Promise.all(
-        urls.slice(0, 15).map(async (u: string) => {
+        urls.slice(0, 25).map(async (u: string) => {
           try {
             const imgRes = await fetch(u.trim(), {
               headers: {
                 "User-Agent":
                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.instagram.com/",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
               },
             });
             if (!imgRes.ok) return null;
@@ -63,6 +65,8 @@ export async function POST(req: NextRequest) {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": "https://www.instagram.com/",
+          "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         },
       });
 

@@ -2,8 +2,8 @@
 
 import React, { useState, useRef } from "react";
 import Image from "next/image";
-import { GalleryCategory } from "@/types/gallery";
-import { uploadImageFile, createGalleryItem } from "@/lib/gallery-service";
+import { GalleryCategory, GalleryItem } from "@/types/gallery";
+import { uploadImageFile, createGalleryItem, createMultipleGalleryItems } from "@/lib/gallery-service";
 import {
   convertAndCompressToWebP,
   formatBytes,
@@ -105,7 +105,7 @@ export default function ImageUploader({
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const origin = window.location.origin;
-      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role="dialog"]')||document.querySelector('article')||document.body;var collected=[];var seen=new Set();function scan(){var imgs=Array.from(root.querySelectorAll('img[src]')).filter(function(img){var s=img.src||'';return(s.includes('cdninstagram')||s.includes('fbcdn'))&&!s.includes('s150x150')&&!s.includes('s320x320')&&!s.includes('/rsrc.php/');});for(var i=0;i<imgs.length;i++){var t=imgs[i];var u=t.src;if(t.srcset){var p=t.srcset.split(',').map(function(s){return s.trim().split(' ');});if(p.length)u=p[p.length-1][0];}if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<10;step++){var nextBtn=root.querySelector('button[aria-label="Next"],button[aria-label*="Next"],button[aria-label="Go to next slide"],button[aria-label*="Suivant"],button[aria-label*="Siguiente"],button:has(polyline[points*="16.5"]),div[role="button"][aria-label*="Next"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,160);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var a=root.querySelector('img[alt]');if(a){var altTxt=a.getAttribute('alt')||'';if(altTxt&&!altTxt.startsWith('Photo by')&&!altTxt.startsWith('May be'))c=altTxt;}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(collected));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(collected[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
+      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role="dialog"]')||document.querySelector('article')||document.body;for(var rw=0;rw<15;rw++){var prevBtn=root.querySelector('button[aria-label="Previous"],button[aria-label*="Previous"],button[aria-label="Go to previous slide"],button[aria-label*="Précédent"],button[aria-label*="Anterior"],div[role="button"][aria-label*="Previous"],button:has(polyline[points*="8.5"])');if(!prevBtn)break;prevBtn.click();await new Promise(function(r){setTimeout(r,120);});}var collected=[];var seen=new Set();function getHighRes(img){var bestUrl='';var maxW=0;if(img.srcset){var re=/(https?:\\/\\/[^\\s]+)\\s+(\\d+)w/g;var m;while((m=re.exec(img.srcset))!==null){var w=parseInt(m[2],10);if(w>maxW){maxW=w;bestUrl=m[1];}}}if(bestUrl&&maxW>=640)return bestUrl;if(img.currentSrc&&!img.currentSrc.includes('150x150')&&!img.currentSrc.includes('240x240')&&!img.currentSrc.includes('320x320')){return img.currentSrc;}return bestUrl||img.currentSrc||img.src;}function isPostImg(img){var alt=(img.getAttribute('alt')||'').toLowerCase();if(alt.includes('profile picture')||alt.includes('profile photo'))return false;var w=img.naturalWidth||img.width||0;var h=img.naturalHeight||img.height||0;if(w>0&&w<240)return false;if(h>0&&h<240)return false;var s=img.src||img.currentSrc||'';if(!s.includes('cdninstagram')&&!s.includes('fbcdn'))return false;if(s.includes('/rsrc.php/')||s.includes('static.cdninstagram'))return false;return true;}function scan(){var imgs=Array.from(root.querySelectorAll('img')).filter(isPostImg);for(var i=0;i<imgs.length;i++){var u=getHighRes(imgs[i]);if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<15;step++){var nextBtn=root.querySelector('button[aria-label="Next"],button[aria-label*="Next"],button[aria-label="Go to next slide"],button[aria-label*="Suivant"],button[aria-label*="Siguiente"],button:has(polyline[points*="16.5"]),div[role="button"][aria-label*="Next"],button[aria-label*="Next slide"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,420);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var finalImgs=[];var idMap=new Map();for(var j=0;j<collected.length;j++){var url=collected[j];var keyMatch=url.match(/_([0-9]{12,22})_n\\./);var key=keyMatch?keyMatch[1]:url.split('?')[0];var isThumb=url.includes('150x150')||url.includes('240x240')||url.includes('320x320');if(!idMap.has(key)){idMap.set(key,url);finalImgs.push(url);}else if(!isThumb&&(idMap.get(key).includes('150x150')||idMap.get(key).includes('240x240')||idMap.get(key).includes('320x320'))){var oldIdx=finalImgs.indexOf(idMap.get(key));if(oldIdx!==-1)finalImgs[oldIdx]=url;idMap.set(key,url);}}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var alts=Array.from(root.querySelectorAll('img[alt]'));for(var k=0;k<alts.length;k++){var txt=alts[k].getAttribute('alt')||'';if(txt&&!txt.startsWith('Photo by')&&!txt.startsWith('May be')){c=txt;break;}}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(finalImgs));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(finalImgs[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
       setBookmarkletCode(code);
     }
   }, []);
@@ -165,9 +165,9 @@ export default function ImageUploader({
 
     try {
       const result = await convertAndCompressToWebP(file, {
-        maxWidth: 1920,
-        maxHeight: 1920,
-        quality: 0.82,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        quality: 0.90,
       });
 
       setSelectedFile(result.file);
@@ -267,10 +267,9 @@ export default function ImageUploader({
     const targets = carouselImages.filter((_, i) => selectedCarouselIndices.includes(i));
     if (targets.length === 0) {
       setError("Please select at least one photograph from the carousel.");
+      setBatchImporting(false);
       return;
     }
-    setBatchImporting(true);
-    setError(null);
     setBatchProgress({ current: 0, total: targets.length });
 
     try {
@@ -300,7 +299,9 @@ export default function ImageUploader({
         throw new Error(data.message || "Failed to download carousel photos.");
       }
 
-      // 2. Process, compress to WebP, and save each photo to Firestore
+      const itemsToCreate: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">> = [];
+
+      // 2. Process, compress to WebP at high fidelity (quality: 0.90, max: 2560px), and prepare batch
       for (let i = 0; i < data.items.length; i++) {
         setBatchProgress({ current: i + 1, total: data.items.length });
         const item = data.items[i];
@@ -311,9 +312,9 @@ export default function ImageUploader({
         });
 
         const webpResult = await convertAndCompressToWebP(rawFile, {
-          maxWidth: 1920,
-          maxHeight: 1920,
-          quality: 0.82,
+          maxWidth: 2560,
+          maxHeight: 2560,
+          quality: 0.90,
         });
 
         const uploadResult = await uploadImageFile(webpResult.file);
@@ -334,7 +335,7 @@ export default function ImageUploader({
         if (shutter.trim()) cleanExif.shutter = shutter.trim();
         const hasExif = Object.keys(cleanExif).length > 0;
 
-        await createGalleryItem({
+        itemsToCreate.push({
           title: itemTitle,
           description: cleanCaption || undefined,
           seriesOrProject: baseSeries,
@@ -358,12 +359,14 @@ export default function ImageUploader({
         });
       }
 
+      await createMultipleGalleryItems(itemsToCreate);
+
       setInstagramNotice(
-        `🎉 Successfully imported all ${data.items.length} photographs from your Instagram carousel!`
+        `🎉 Successfully imported all ${itemsToCreate.length} photographs from your Instagram carousel!`
       );
       setTimeout(() => {
         onSuccess();
-      }, 1500);
+      }, 1200);
     } catch (err: unknown) {
       const e = err as Error;
       setError(e.message || "Batch import failed.");
@@ -373,52 +376,7 @@ export default function ImageUploader({
     }
   };
 
-  React.useEffect(() => {
-    const onPaste = async (e: ClipboardEvent) => {
-      // 1. Check if user pasted an image file from clipboard (e.g. copied from Instagram)
-      if (e.clipboardData?.items) {
-        for (const item of Array.from(e.clipboardData.items)) {
-          if (item.type.startsWith("image/")) {
-            const file = item.getAsFile();
-            if (file) {
-              e.preventDefault();
-              await handleFileSelect(file);
-              return;
-            }
-          }
-        }
-      }
-
-      // 2. Check if user pasted an Instagram URL
-      const text = e.clipboardData?.getData("text")?.trim();
-      if (text && (text.includes("instagram.com") || text.includes("cdninstagram.com"))) {
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        if (activeTag !== "input" && activeTag !== "textarea") {
-          e.preventDefault();
-          setInstagramInputUrl(text);
-          handleInstagramImport(text);
-        }
-      }
-    };
-
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [description]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handlePublishSingle = async () => {
     // All fields are optional. Gracefully resolve title if left blank.
     let finalTitle = title.trim();
     if (!finalTitle) {
@@ -520,11 +478,69 @@ export default function ImageUploader({
       onSuccess();
     } catch (err: unknown) {
       const e = err as Error;
-      setError(e.message || "Failed to upload image. Please try again.");
+      setError(e.message || "Failed to publish photograph.");
     } finally {
       setUploading(false);
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // If carousel with multiple selected photos, publish ALL selected photos together!
+    if (carouselImages.length > 1 && selectedCarouselIndices.length > 1) {
+      await handleBatchImportAll();
+      return;
+    }
+
+    // Otherwise, publish the single photograph
+    await handlePublishSingle();
+  };
+
+  React.useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      // 1. Check if user pasted an image file from clipboard (e.g. copied from Instagram)
+      if (e.clipboardData?.items) {
+        for (const item of Array.from(e.clipboardData.items)) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              await handleFileSelect(file);
+              return;
+            }
+          }
+        }
+      }
+
+      // 2. Check if user pasted an Instagram URL
+      const text = e.clipboardData?.getData("text")?.trim();
+      if (text && (text.includes("instagram.com") || text.includes("cdninstagram.com"))) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        if (activeTag !== "input" && activeTag !== "textarea") {
+          e.preventDefault();
+          setInstagramInputUrl(text);
+          handleInstagramImport(text);
+        }
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [description]);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+
 
   return (
     <div className="bg-[#FAF7F2] border border-[#DDD6CA] p-6 sm:p-8 text-[#1C1917] rounded-2xl shadow-xs font-admin">
@@ -1183,29 +1199,62 @@ export default function ImageUploader({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-3 pt-5 border-t border-[#DDD6CA]">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-5 py-2.5 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={uploading || converting}
-            className="px-6 py-2.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors disabled:opacity-50 cursor-pointer rounded-lg shadow-sm"
-          >
-            {uploading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
-                <span>Publishing to Archive...</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-[#DDD6CA]">
+          <div className="text-xs text-stone-500">
+            {carouselImages.length > 1 ? (
+              <span className="font-semibold text-purple-800">
+                📸 Carousel post: {selectedCarouselIndices.length} of {carouselImages.length} photographs selected
               </span>
             ) : (
-              <span>Publish Photograph</span>
+              <span>All metadata fields are optional</span>
             )}
-          </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-5 py-2.5 text-stone-600 hover:text-[#1C1917] text-sm sm:text-base font-semibold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+
+            {carouselImages.length > 1 && selectedCarouselIndices.length > 1 && (
+              <button
+                type="button"
+                disabled={uploading || converting || batchImporting}
+                onClick={handlePublishSingle}
+                className="px-4 py-2.5 bg-stone-200 hover:bg-stone-300 text-stone-800 text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+                title="Publish only the currently viewed photograph"
+              >
+                Publish Only Photo #{activeCarouselIdx + 1}
+              </button>
+            )}
+
+            <button
+              type="submit"
+              disabled={uploading || converting || batchImporting}
+              className="px-6 py-2.5 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm sm:text-base font-semibold transition-colors disabled:opacity-50 cursor-pointer rounded-lg shadow-sm"
+            >
+              {batchImporting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
+                  <span>
+                    Publishing Carousel {batchProgress ? `(${batchProgress.current}/${batchProgress.total})` : "..."}
+                  </span>
+                </span>
+              ) : uploading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#FAF7F2]" />
+                  <span>Publishing to Archive...</span>
+                </span>
+              ) : carouselImages.length > 1 && selectedCarouselIndices.length > 1 ? (
+                <span>Publish All {selectedCarouselIndices.length} Photographs</span>
+              ) : (
+                <span>Publish Photograph</span>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </div>
