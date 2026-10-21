@@ -3,7 +3,39 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { url, postUrl } = body;
+    const { url, urls, postUrl } = body;
+
+    // Batch direct images handler (downloads multiple carousel images in parallel)
+    if (Array.isArray(urls) && urls.length > 0) {
+      const items = await Promise.all(
+        urls.slice(0, 15).map(async (u: string) => {
+          try {
+            const imgRes = await fetch(u.trim(), {
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              },
+            });
+            if (!imgRes.ok) return null;
+            const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+            const buffer = await imgRes.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString("base64");
+            return {
+              dataUrl: `data:${contentType};base64,${base64}`,
+              sourceUrl: u,
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+      const validItems = items.filter(Boolean);
+      return NextResponse.json({
+        success: true,
+        items: validItems,
+        instagramUrl: postUrl,
+      });
+    }
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(

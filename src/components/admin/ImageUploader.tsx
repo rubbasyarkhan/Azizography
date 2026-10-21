@@ -82,6 +82,7 @@ export default function ImageUploader({
 
   // Multi-photo Carousel State
   const [carouselImages, setCarouselImages] = useState<string[]>([]);
+  const [selectedCarouselIndices, setSelectedCarouselIndices] = useState<number[]>([]);
   const [activeCarouselIdx, setActiveCarouselIdx] = useState<number>(0);
   const [batchImporting, setBatchImporting] = useState<boolean>(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
@@ -89,11 +90,22 @@ export default function ImageUploader({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bookmarkletLinkRef = useRef<HTMLAnchorElement>(null);
 
+  // Helper to extract clean titles, tags, and captions from Instagram posts
+  const parseInstagramCaption = (rawCaption: string) => {
+    const hashtags = Array.from(rawCaption.matchAll(/#([a-zA-Z0-9_]+)/g)).map((m) =>
+      m[1].toLowerCase()
+    );
+    const cleanCaption = rawCaption.replace(/(?:#[a-zA-Z0-9_]+\s*)+$/g, "").trim();
+    const firstLine = cleanCaption.split("\n")[0].replace(/#\w+/g, "").trim();
+    const cleanTitle = firstLine.slice(0, 48).trim() || "Instagram Photograph";
+    return { hashtags, cleanCaption, cleanTitle };
+  };
+
   // Generate dynamic bookmarklet pointing to the current host (localhost in dev, domain in prod)
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const origin = window.location.origin;
-      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var collected=[];var seen=new Set();function scan(){var imgs=Array.from(document.querySelectorAll('article img[src],div[role="dialog"] img[src],main img[src]')).filter(function(img){var s=img.src||'';return(s.includes('cdninstagram')||s.includes('fbcdn'))&&!s.includes('s150x150')&&!s.includes('s320x320')&&!s.includes('/rsrc.php/');});for(var i=0;i<imgs.length;i++){var t=imgs[i];var u=t.src;if(t.srcset){var p=t.srcset.split(',').map(function(s){return s.trim().split(' ');});if(p.length)u=p[p.length-1][0];}if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<10;step++){var nextBtn=document.querySelector('button[aria-label="Next"],button[aria-label="Go to next slide"],button[aria-label*="Next"],div[role="button"][aria-label*="Next"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,140);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var c='';var h=document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var a=document.querySelector('article img[alt],div[role="dialog"] img[alt]');if(a){var altTxt=a.getAttribute('alt')||'';if(altTxt&&!altTxt.startsWith('Photo by')&&!altTxt.startsWith('May be'))c=altTxt;}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(collected));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(collected[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
+      const code = `javascript:(async function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var root=document.querySelector('div[role="dialog"]')||document.querySelector('article')||document.body;var collected=[];var seen=new Set();function scan(){var imgs=Array.from(root.querySelectorAll('img[src]')).filter(function(img){var s=img.src||'';return(s.includes('cdninstagram')||s.includes('fbcdn'))&&!s.includes('s150x150')&&!s.includes('s320x320')&&!s.includes('/rsrc.php/');});for(var i=0;i<imgs.length;i++){var t=imgs[i];var u=t.src;if(t.srcset){var p=t.srcset.split(',').map(function(s){return s.trim().split(' ');});if(p.length)u=p[p.length-1][0];}if(u&&!seen.has(u)){seen.add(u);collected.push(u);}}}scan();for(var step=0;step<10;step++){var nextBtn=root.querySelector('button[aria-label="Next"],button[aria-label*="Next"],button[aria-label="Go to next slide"],button[aria-label*="Suivant"],button[aria-label*="Siguiente"],button:has(polyline[points*="16.5"]),div[role="button"][aria-label*="Next"]');if(!nextBtn)break;nextBtn.click();await new Promise(function(r){setTimeout(r,160);});scan();}if(!collected.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var c='';var h=root.querySelector('h1')||document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var a=root.querySelector('img[alt]');if(a){var altTxt=a.getAttribute('alt')||'';if(altTxt&&!altTxt.startsWith('Photo by')&&!altTxt.startsWith('May be'))c=altTxt;}}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];var encImgs=encodeURIComponent(JSON.stringify(collected));window.open('${origin}/admin/dashboard?import_imgs='+encImgs+'&import_img='+encodeURIComponent(collected[0])+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
       setBookmarkletCode(code);
     }
   }, []);
@@ -112,26 +124,31 @@ export default function ImageUploader({
         setInstagramUrl(initialImportData.postUrl);
       }
       if (initialImportData.caption) {
-        setDescription(initialImportData.caption);
+        const { hashtags, cleanCaption, cleanTitle } = parseInstagramCaption(
+          initialImportData.caption
+        );
+        setDescription(cleanCaption);
         if (!title) {
-          const firstLine = initialImportData.caption.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 45);
-          if (firstLine) {
-            setTitle(firstLine);
-            if (!seriesOrProject && initialImportData.imageUrls && initialImportData.imageUrls.length > 1) {
-              setSeriesOrProject(firstLine);
-            }
+          setTitle(cleanTitle);
+          if (!seriesOrProject && initialImportData.imageUrls && initialImportData.imageUrls.length > 1) {
+            setSeriesOrProject(cleanTitle);
           }
+        }
+        if (hashtags.length > 0 && !tagsString) {
+          setTagsString(hashtags.join(", "));
         }
       }
 
       if (initialImportData.imageUrls && initialImportData.imageUrls.length > 0) {
         setCarouselImages(initialImportData.imageUrls);
+        setSelectedCarouselIndices(initialImportData.imageUrls.map((_, i) => i));
         setActiveCarouselIdx(0);
         const firstImg = initialImportData.imageUrls[0];
         setInstagramInputUrl(firstImg);
         handleInstagramImport(firstImg, initialImportData.postUrl, initialImportData.caption);
       } else if (initialImportData.imageUrl) {
         setCarouselImages([initialImportData.imageUrl]);
+        setSelectedCarouselIndices([0]);
         setInstagramInputUrl(initialImportData.imageUrl);
         handleInstagramImport(initialImportData.imageUrl, initialImportData.postUrl, initialImportData.caption);
       }
@@ -247,63 +264,71 @@ export default function ImageUploader({
     if (carouselImages.length === 0) return;
     setBatchImporting(true);
     setError(null);
-    setBatchProgress({ current: 0, total: carouselImages.length });
+    const targets = carouselImages.filter((_, i) => selectedCarouselIndices.includes(i));
+    if (targets.length === 0) {
+      setError("Please select at least one photograph from the carousel.");
+      return;
+    }
+    setBatchImporting(true);
+    setError(null);
+    setBatchProgress({ current: 0, total: targets.length });
 
     try {
-      const baseTitle =
-        title.trim() ||
-        description.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 40) ||
-        "Instagram Photo";
-      const baseSeries = seriesOrProject.trim() || (carouselImages.length > 1 ? baseTitle : undefined);
-      const tags = tagsString
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      const { hashtags, cleanCaption, cleanTitle } = parseInstagramCaption(
+        description || title || ""
+      );
+      const baseTitle = title.trim() || cleanTitle || "Instagram Photograph";
+      const baseSeries = seriesOrProject.trim() || (targets.length > 1 ? baseTitle : undefined);
+      const finalTags = Array.from(
+        new Set([
+          ...tagsString
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean),
+          ...hashtags,
+        ])
+      );
 
-      for (let i = 0; i < carouselImages.length; i++) {
-        setBatchProgress({ current: i + 1, total: carouselImages.length });
-        const imgUrl = carouselImages[i];
+      // 1. Parallel fetch all selected image URLs from our API
+      const res = await fetch("/api/admin/instagram-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: targets, postUrl: instagramUrl || undefined }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.items || data.items.length === 0) {
+        throw new Error(data.message || "Failed to download carousel photos.");
+      }
 
-        // 1. Fetch image base64 via API route
-        const res = await fetch("/api/admin/instagram-import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: imgUrl, postUrl: instagramUrl || undefined }),
-        });
-        const data = await res.json();
-        if (!data.success || !data.dataUrl) {
-          throw new Error(`Failed to import photo #${i + 1} from carousel.`);
-        }
+      // 2. Process, compress to WebP, and save each photo to Firestore
+      for (let i = 0; i < data.items.length; i++) {
+        setBatchProgress({ current: i + 1, total: data.items.length });
+        const item = data.items[i];
 
-        // 2. Convert to File
-        const blob = await fetch(data.dataUrl).then((r) => r.blob());
+        const blob = await fetch(item.dataUrl).then((r) => r.blob());
         const rawFile = new File([blob], `carousel_${Date.now()}_${i + 1}.jpg`, {
           type: blob.type || "image/jpeg",
         });
 
-        // 3. Compress to WebP
         const webpResult = await convertAndCompressToWebP(rawFile, {
           maxWidth: 1920,
           maxHeight: 1920,
           quality: 0.82,
         });
 
-        // 4. Upload to Storage or DataURL
         const uploadResult = await uploadImageFile(webpResult.file);
 
-        // 5. Compute aspect ratio
         const ratio = webpResult.width / webpResult.height;
         let itemAspect: "portrait" | "landscape" | "square" | "tall" = "portrait";
         if (ratio > 1.25) itemAspect = "landscape";
         else if (ratio < 0.65) itemAspect = "tall";
         else if (ratio >= 0.88 && ratio <= 1.12) itemAspect = "square";
 
-        const itemTitle = carouselImages.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
+        const itemTitle = data.items.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
 
-        // 6. Create in Firestore / Portfolio
         await createGalleryItem({
           title: itemTitle,
-          description: description.trim() || undefined,
+          description: cleanCaption || undefined,
           seriesOrProject: baseSeries,
           category,
           imageUrl: uploadResult.imageUrl,
@@ -319,7 +344,7 @@ export default function ImageUploader({
           location: location.trim() || undefined,
           year,
           aspectRatio: itemAspect,
-          tags,
+          tags: finalTags,
           instagramUrl: instagramUrl.trim() || undefined,
           exif: {
             camera,
@@ -332,7 +357,7 @@ export default function ImageUploader({
       }
 
       setInstagramNotice(
-        `🎉 Successfully imported all ${carouselImages.length} photographs from your Instagram carousel!`
+        `🎉 Successfully imported all ${data.items.length} photographs from your Instagram carousel!`
       );
       setTimeout(() => {
         onSuccess();
@@ -591,12 +616,12 @@ export default function ImageUploader({
                   Carousel Post
                 </span>
                 <span className="text-xs font-bold text-stone-900">
-                  {carouselImages.length} Photographs Found
+                  {carouselImages.length} Photographs Found &bull; {selectedCarouselIndices.length} Selected
                 </span>
               </div>
               <button
                 type="button"
-                disabled={batchImporting || converting}
+                disabled={batchImporting || converting || selectedCarouselIndices.length === 0}
                 onClick={handleBatchImportAll}
                 className="px-3.5 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 text-white font-sans text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
               >
@@ -610,41 +635,61 @@ export default function ImageUploader({
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>⚡ Batch Import All ({carouselImages.length} Photos)</span>
+                    <span>⚡ Batch Import Selected ({selectedCarouselIndices.length} Photos)</span>
                   </>
                 )}
               </button>
             </div>
 
             <p className="text-[11px] text-stone-600">
-              Click any photograph below to preview & tune details individually, or click{" "}
-              <strong>Batch Import All</strong> to publish all of them to your portfolio at once!
+              Click any photo to preview & customize individually, check/uncheck to choose which slides to import, or click{" "}
+              <strong>Batch Import Selected</strong> to publish them all as a connected series!
             </p>
 
             <div className="flex items-center gap-2.5 overflow-x-auto pb-1 pt-1">
               {carouselImages.map((imgUrl, idx) => {
                 const isActive = idx === activeCarouselIdx;
+                const isChecked = selectedCarouselIndices.includes(idx);
                 return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectCarouselImage(imgUrl, idx)}
-                    className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                      isActive
-                        ? "border-purple-600 ring-2 ring-purple-300 scale-102 shadow-sm"
-                        : "border-stone-200 hover:border-purple-400 opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imgUrl}
-                      alt={`Carousel slide ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[9px] font-mono font-bold px-1 rounded">
-                      #{idx + 1}
-                    </span>
-                  </button>
+                  <div key={idx} className="relative group shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectCarouselImage(imgUrl, idx)}
+                      className={`relative w-16 h-16 sm:w-20 sm:h-20 block rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                        isActive
+                          ? "border-purple-600 ring-2 ring-purple-300 scale-102 shadow-sm"
+                          : "border-stone-200 hover:border-purple-400 opacity-80 hover:opacity-100"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={`Carousel slide ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[9px] font-mono font-bold px-1 rounded">
+                        #{idx + 1}
+                      </span>
+                    </button>
+                    {/* Checkbox badge to toggle inclusion in batch */}
+                    <button
+                      type="button"
+                      aria-label={isChecked ? `Exclude slide #${idx + 1}` : `Include slide #${idx + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCarouselIndices((prev) =>
+                          isChecked ? prev.filter((i) => i !== idx) : [...prev, idx]
+                        );
+                      }}
+                      className={`absolute top-1 left-1 w-4 h-4 rounded flex items-center justify-center transition-all cursor-pointer shadow-xs ${
+                        isChecked
+                          ? "bg-purple-600 text-white"
+                          : "bg-white/80 border border-stone-300 text-transparent"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3 h-3 fill-current" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
