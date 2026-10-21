@@ -903,13 +903,30 @@ export default function ImageUploader({
                 {conversionStats && (
                   <div className="p-4 bg-[#F4F0EA] border border-[#DDD6CA] rounded-xl text-sm font-mono text-stone-800">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-stone-600 font-sans font-medium">WebP Compression</span>
-                      <span className="text-emerald-700 font-bold font-sans">
-                        -{conversionStats.compressionRatio}% smaller
-                      </span>
+                      <span className="text-stone-600 font-sans font-medium">WebP Optimization</span>
+                      {conversionStats.compressionRatio > 0 ? (
+                        <span className="text-emerald-700 font-bold font-sans">
+                          -{conversionStats.compressionRatio}% smaller
+                        </span>
+                      ) : (
+                        <span className="text-stone-700 font-semibold font-sans text-xs bg-stone-200/80 px-2 py-0.5 rounded-full">
+                          High Fidelity WebP
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-stone-600 space-y-1">
-                      <div>File size: <span className="line-through text-stone-400">{formatBytes(conversionStats.originalSize)}</span> → <span className="font-bold text-[#1C1917]">{formatBytes(conversionStats.compressedSize)}</span></div>
+                      <div>
+                        File size:{" "}
+                        {conversionStats.compressedSize < conversionStats.originalSize ? (
+                          <>
+                            <span className="line-through text-stone-400">{formatBytes(conversionStats.originalSize)}</span> → <span className="font-bold text-[#1C1917]">{formatBytes(conversionStats.compressedSize)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-stone-500">{formatBytes(conversionStats.originalSize)}</span> → <span className="font-bold text-[#1C1917]">{formatBytes(conversionStats.compressedSize)}</span> <span className="text-stone-500 text-[11px]">(Quality Preserved)</span>
+                          </>
+                        )}
+                      </div>
                       <div>Render bounds: {conversionStats.width} × {conversionStats.height} px</div>
                     </div>
                   </div>
