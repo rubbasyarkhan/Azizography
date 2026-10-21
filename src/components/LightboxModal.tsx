@@ -129,28 +129,28 @@ export default function LightboxModal({
               alt={item.title}
               decoding="sync"
               fetchPriority="high"
-              className="max-h-[62vh] max-w-[85vw] object-contain shadow-2xl rounded"
+              className="max-h-[50vh] max-w-[85vw] object-contain shadow-2xl rounded"
             />
-            <div className="mt-4 text-center">
+            <div className="mt-5 text-center max-w-xl px-4">
               <h2 className="font-artistic text-xl sm:text-2xl italic text-white/95 font-normal tracking-wide">
                 {item.title}
               </h2>
               {(item.seriesOrProject || item.description || item.artist) && (
-                <p className="font-syne text-[11px] uppercase tracking-[0.22em] text-neutral-400 mt-1">
+                <p className="font-syne text-[12px] sm:text-[13px] text-neutral-300 mt-1.5 leading-relaxed">
                   {item.seriesOrProject || item.description || item.artist}
                 </p>
               )}
               {item.instagramUrl && (
-                <div className="mt-2.5">
+                <div className="mt-3 flex items-center justify-center">
                   <a
                     href={item.instagramUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-sans text-pink-300 hover:text-white underline underline-offset-4"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/[0.07] hover:bg-white/[0.16] border border-white/15 hover:border-white/35 rounded-full text-[11px] font-syne uppercase tracking-wider text-pink-400 hover:text-white transition-all"
                   >
-                    <InstagramIcon className="w-3.5 h-3.5 text-pink-400" />
+                    <InstagramIcon className="w-3.5 h-3.5" />
                     <span>Like on Instagram</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <ArrowUpRight className="w-3 h-3 opacity-70" />
                   </a>
                 </div>
               )}
@@ -169,7 +169,7 @@ export default function LightboxModal({
             initialIndex={initialIndex}
             preset="liquid"
             intro="none"
-            cardHeight={0.62}
+            cardHeight={0.48}
             gap={16}
             radius={4}
             fit="natural"

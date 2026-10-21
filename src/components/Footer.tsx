@@ -1,36 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { ArrowUp } from "lucide-react";
-import ImageTrail from "./ImageTrail";
-import {
-  subscribeToFooterTrailItems,
-  getFooterTrailItems,
-} from "@/lib/gallery-service";
-
-// Curated photography collection for footer mouse trail (populated via admin portal)
-export const DEFAULT_FOOTER_TRAIL_IMAGES: string[] = [];
 
 export default function Footer() {
-  const [trailImages, setTrailImages] = useState<string[]>([]);
-
-  useEffect(() => {
-    // Initial load from cache or visible images curated for footer trail
-    const initial = getFooterTrailItems();
-    const initialUrls = initial.map((i) => i.imageUrl).filter(Boolean);
-    if (initialUrls.length > 0) {
-      setTrailImages(initialUrls);
-    }
-
-    // Subscribe to live admin curation updates
-    const unsubscribe = subscribeToFooterTrailItems((items) => {
-      const urls = items.map((i) => i.imageUrl).filter(Boolean);
-      setTrailImages(urls);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
   const scrollToTop = () => {
     if (typeof window !== "undefined") {
       const lenis = (window as unknown as { __lenis?: { scrollTo: (target: number | string) => void } }).__lenis;
@@ -94,30 +67,8 @@ export default function Footer() {
 
   return (
     <footer className="relative w-full min-h-screen bg-[#0A0A0A] text-[#FAF9F6] flex flex-col justify-between pt-16 sm:pt-20 pb-10 sm:pb-14 px-6 sm:px-12 md:px-16 lg:px-24 selection:bg-white selection:text-black border-t border-neutral-900 overflow-hidden">
-      {/* Background Interactive Mouse Image Trail */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden isolate">
-        {trailImages.length > 0 && (
-          <ImageTrail
-            items={trailImages}
-            size={250}
-            aspectRatio={1.2}
-            radius={14}
-            threshold={80}
-            lifetime={0.9}
-            appearScale={0.94}
-            zoom={1}
-            flash={0}
-            exitScale={0.96}
-            drift={0.15}
-            rotation={8}
-            sizeVariance={0.08}
-            className="pointer-events-none"
-          />
-        )}
-      </div>
-
-      {/* Foreground Content: Layered strictly at relative z-20 pointer-events-auto so images NEVER obscure or cover text */}
-      <div className="relative z-20 flex flex-col justify-between flex-1 pointer-events-auto">
+      {/* Foreground Content */}
+      <div className="relative z-10 flex flex-col justify-between flex-1 pointer-events-auto">
         {/* Top Metadata Spec Table with Clean Minimalist Editorial Styling */}
         <div className="w-full border-t border-b border-neutral-800 divide-y divide-neutral-900">
           {metadataSpecs.map((spec) => (
