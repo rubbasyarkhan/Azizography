@@ -69,12 +69,26 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
       const q = query(collection(db, "gallery_items"), orderBy("orderIndex", "asc"));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        const items = snapshot.docs.map((docSnap) => ({
+        const firestoreItems = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         })) as GalleryItem[];
-        saveLocalItems(items);
-        return items;
+
+        const localItems = getLocalItems();
+        const mergedMap = new Map<string, GalleryItem>();
+        for (const item of firestoreItems) {
+          mergedMap.set(item.id, item);
+        }
+        for (const item of localItems) {
+          if (!mergedMap.has(item.id)) {
+            mergedMap.set(item.id, item);
+          }
+        }
+        const merged = Array.from(mergedMap.values()).sort(
+          (a, b) => a.orderIndex - b.orderIndex
+        );
+        saveLocalItems(merged);
+        return merged;
       }
       return [];
     } catch (err) {
@@ -112,12 +126,27 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
         q,
         (snapshot) => {
           if (!snapshot.empty) {
-            const items = snapshot.docs.map((d) => ({
+            const firestoreItems = snapshot.docs.map((d) => ({
               id: d.id,
               ...d.data(),
             })) as GalleryItem[];
-            saveLocalItems(items);
-            callback(items);
+
+            // Merge Firestore items with local items so newly created items are never lost on refresh
+            const localItems = getLocalItems();
+            const mergedMap = new Map<string, GalleryItem>();
+            for (const item of firestoreItems) {
+              mergedMap.set(item.id, item);
+            }
+            for (const item of localItems) {
+              if (!mergedMap.has(item.id)) {
+                mergedMap.set(item.id, item);
+              }
+            }
+            const merged = Array.from(mergedMap.values()).sort(
+              (a, b) => a.orderIndex - b.orderIndex
+            );
+            saveLocalItems(merged);
+            callback(merged);
           } else {
             callback(getLocalItems());
           }
@@ -229,13 +258,33 @@ export async function uploadImageFile(
       return { imageUrl, storagePath, ...dimensions };
     } catch (storageErr) {
       console.warn(
-        "Firebase Storage upload failed or Cloud Storage is not enabled; using compressed WebP data URL fallback:",
+        "Firebase Storage upload failed or Cloud Storage is not enabled; using local media storage fallback:",
         storageErr
       );
     }
   }
 
-  // Fallback: return the compressed WebP data URL directly
+  // Server-side local upload fallback: saves to /uploads/<filename>.webp as a clean static asset
+  try {
+    const formData = new FormData();
+    formData.append("file", processedFile);
+    const res = await fetch("/api/admin/save-media", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success && data.imageUrl) {
+      return {
+        imageUrl: data.imageUrl,
+        storagePath: data.storagePath,
+        ...dimensions,
+      };
+    }
+  } catch (saveErr) {
+    console.warn("Local media save fallback notice:", saveErr);
+  }
+
+  // Fallback: return the compressed WebP data URL directly if server save fails
   if (webpDataUrl) {
     return {
       imageUrl: webpDataUrl,
@@ -257,6 +306,21 @@ export async function uploadImageFile(
     reader.onerror = (error) => reject(error);
     reader.readAsDataURL(file);
   });
+}
+
+// Deep clean helper to remove any undefined properties that Firestore rejects
+function cleanFirestoreData<T extends Record<string, any>>(obj: T): Partial<T> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        cleaned[key] = cleanFirestoreData(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned as Partial<T>;
 }
 
 // Add a new gallery item
@@ -282,9 +346,10 @@ export async function createGalleryItem(
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", newId);
-      await setDoc(docRef, updatedItems[0]);
+      const cleaned = cleanFirestoreData(updatedItems[0]);
+      await setDoc(docRef, cleaned);
     } catch (err) {
-      console.warn("Firestore document write pending rules authorization. Item saved in local storage:", err);
+      console.warn("Firestore document write notice:", err);
     }
   }
 
@@ -305,9 +370,10 @@ export async function updateGalleryItem(
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "gallery_items", id);
-      await updateDoc(docRef, updates);
+      const cleaned = cleanFirestoreData(updates);
+      await updateDoc(docRef, cleaned);
     } catch (err) {
-      console.warn("Firestore update pending rules authorization. Item updated in local storage:", err);
+      console.warn("Firestore update notice:", err);
     }
   }
 }

@@ -19,6 +19,7 @@ rules_version = '2';
 //   - isFeatured: bool (optional) - Highlight flag for portfolio exhibition
 //   - isVisible: bool (optional) - Public exhibition visibility toggle
 //   - isIrisItem: bool (optional) - Inclusion toggle for Iris loading sequence
+//   - isFooterTrailItem: bool (optional) - Inclusion toggle for interactive footer mouse trail
 //   - createdAt: string (optional, 0-50 chars, immutable on update) - ISO creation timestamp
 //   - artist: string (optional, 0-200 chars) - Featured subject or artist name
 //   - location: string (optional, 0-200 chars) - Exhibition or venue location
@@ -26,6 +27,9 @@ rules_version = '2';
 //   - aspectRatio: string (optional, 0-20 chars) - Aspect ratio layout hint
 //   - width: number (optional, >= 0) - Pixel width
 //   - height: number (optional, >= 0) - Pixel height
+//   - blurDataUrl: string (optional, 0-10,000 chars) - Base64 blur placeholder data URL
+//   - description: string (optional, 0-3000 chars) - Photograph description or artist note
+//   - instagramUrl: string (optional, 0-1000 chars) - External Instagram post or reel link
 //   - exif: map (optional, keys: camera, lens, iso, aperture, shutter) - Photography metadata
 //   - tags: list (optional, max 50 items) - Categorization tags
 //
@@ -127,8 +131,9 @@ service cloud.firestore {
         hasOnlyAllowedFields([
           'id', 'title', 'orderIndex', 'imageUrl', 'category',
           'seriesOrProject', 'storagePath', 'isFeatured', 'isVisible',
-          'isIrisItem', 'createdAt', 'artist', 'location', 'year',
-          'aspectRatio', 'width', 'height', 'exif', 'tags'
+          'isIrisItem', 'isFooterTrailItem', 'createdAt', 'artist', 'location', 'year',
+          'aspectRatio', 'width', 'height', 'blurDataUrl', 'description', 'instagramUrl',
+          'exif', 'tags'
         ]) &&
         validStringLength('title', 1, 300) &&
         data.orderIndex is number &&
@@ -141,6 +146,7 @@ service cloud.firestore {
         isValidOptionalBool('isFeatured') &&
         isValidOptionalBool('isVisible') &&
         isValidOptionalBool('isIrisItem') &&
+        isValidOptionalBool('isFooterTrailItem') &&
         isValidOptionalString('createdAt', 0, 50) &&
         isValidOptionalString('artist', 0, 200) &&
         isValidOptionalString('location', 0, 200) &&
@@ -148,6 +154,9 @@ service cloud.firestore {
         isValidOptionalString('aspectRatio', 0, 20) &&
         isValidOptionalNumber('width', 0) &&
         isValidOptionalNumber('height', 0) &&
+        isValidOptionalString('blurDataUrl', 0, 10000) &&
+        isValidOptionalString('description', 0, 3000) &&
+        isValidOptionalString('instagramUrl', 0, 1000) &&
         isValidExif(data) &&
         isValidTags(data);
     }
