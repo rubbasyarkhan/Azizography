@@ -245,6 +245,32 @@ export async function uploadImageFile(
   // If already WebP, avoid re-compressing to preserve original visual fidelity
   if (file.type === "image/webp" || file.name.endsWith(".webp")) {
     processedFile = file;
+    if (typeof window !== "undefined") {
+      try {
+        const bmp = await createImageBitmap(file);
+        dimensions = { width: bmp.width, height: bmp.height };
+        bmp.close();
+      } catch {
+        try {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise<void>((resolve) => {
+            img.onload = () => {
+              dimensions = { width: img.naturalWidth, height: img.naturalHeight };
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.src = url;
+          });
+        } catch {
+          // Ignore fallback errors
+        }
+      }
+    }
   } else {
     try {
       const webpResult = await convertAndCompressToWebP(file, {
