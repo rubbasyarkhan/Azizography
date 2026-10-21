@@ -18,15 +18,28 @@ import {
   Sliders,
   ArrowRight,
   ArrowLeft,
+  Copy,
+  Bookmark,
+  ExternalLink,
+  HelpCircle,
 } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
 
 interface ImageUploaderProps {
   onSuccess: () => void;
   onCancel: () => void;
+  initialImportData?: {
+    imageUrl?: string;
+    postUrl?: string;
+    caption?: string;
+  } | null;
 }
 
-export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProps) {
+export default function ImageUploader({
+  onSuccess,
+  onCancel,
+  initialImportData,
+}: ImageUploaderProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [conversionStats, setConversionStats] = useState<WebPConversionResult | null>(null);
@@ -63,8 +76,37 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
   const [instagramInputUrl, setInstagramInputUrl] = useState("");
   const [fetchingInstagram, setFetchingInstagram] = useState(false);
   const [instagramNotice, setInstagramNotice] = useState<string | null>(null);
+  const [bookmarkletCode, setBookmarkletCode] = useState<string>("");
+  const [copiedBookmarklet, setCopiedBookmarklet] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Generate dynamic bookmarklet pointing to the current host (localhost in dev, domain in prod)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const origin = window.location.origin;
+      const code = `javascript:(function(){try{document.querySelectorAll('div._aagw').forEach(function(el){el.remove();});var imgs=Array.from(document.querySelectorAll('article img[src],div[role="dialog"] img[src],main img[src]')).filter(function(img){var s=img.src||'';return(s.includes('cdninstagram')||s.includes('fbcdn'))&&!s.includes('s150x150')&&!s.includes('s320x320')&&!s.includes('/rsrc.php/');});if(!imgs.length){alert('Azizography: Open an Instagram post modal or page first!');return;}var t=imgs[0],u=t.src;if(t.srcset){var p=t.srcset.split(',').map(function(s){return s.trim().split(' ');});if(p.length)u=p[p.length-1][0];}var c='';var h=document.querySelector('h1');if(h&&h.innerText){c=h.innerText;}else{var a=t.getAttribute('alt')||'';if(a&&!a.startsWith('Photo by')&&!a.startsWith('May be'))c=a;}var m=window.location.href.match(/(https:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel)\\/[a-zA-Z0-9_-]+)/);var pUrl=m?m[1]+'/':window.location.href.split('?')[0];window.open('${origin}/admin/dashboard?import_img='+encodeURIComponent(u)+'&import_post='+encodeURIComponent(pUrl)+'&import_caption='+encodeURIComponent(c),'_blank');}catch(e){alert('Azizography Importer Error: '+e.message);}})();`;
+      setBookmarkletCode(code);
+    }
+  }, []);
+
+  // Handle incoming data from Bookmarklet redirect or parent prop
+  React.useEffect(() => {
+    if (initialImportData?.imageUrl) {
+      if (initialImportData.postUrl) {
+        setInstagramUrl(initialImportData.postUrl);
+      }
+      if (initialImportData.caption) {
+        setDescription(initialImportData.caption);
+        if (!title) {
+          const firstLine = initialImportData.caption.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 45);
+          if (firstLine) setTitle(firstLine);
+        }
+      }
+      setInstagramInputUrl(initialImportData.imageUrl);
+      handleInstagramImport(initialImportData.imageUrl, initialImportData.postUrl, initialImportData.caption);
+    }
+  }, [initialImportData]);
 
   const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -106,7 +148,11 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
     }
   };
 
-  const handleInstagramImport = async (urlToFetch?: string) => {
+  const handleInstagramImport = async (
+    urlToFetch?: string,
+    explicitPostUrl?: string,
+    explicitCaption?: string
+  ) => {
     const targetUrl = (urlToFetch || instagramInputUrl).trim();
     if (!targetUrl) return;
 
@@ -118,7 +164,10 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
       const res = await fetch("/api/admin/instagram-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: targetUrl }),
+        body: JSON.stringify({
+          url: targetUrl,
+          postUrl: explicitPostUrl || instagramUrl || undefined,
+        }),
       });
 
       const data = await res.json();
@@ -129,16 +178,22 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
 
         await handleFileSelect(file);
 
-        if (data.instagramUrl) {
-          setInstagramUrl(data.instagramUrl);
+        if (data.instagramUrl || explicitPostUrl) {
+          setInstagramUrl(data.instagramUrl || explicitPostUrl || "");
         }
-        if (data.caption && !description) {
-          setDescription(data.caption);
+        const cap = explicitCaption || data.caption;
+        if (cap) {
+          setDescription((prev) => prev || cap);
+          setTitle((prev) => {
+            if (prev) return prev;
+            const cleanTitle = cap.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 45);
+            return cleanTitle || "Untitled";
+          });
         }
-        setInstagramNotice("Photo successfully ingested from Instagram! You can now adjust title and details.");
+        setInstagramNotice("✨ Instagram photo imported and optimized to WebP! Review your title and details below.");
       } else if (data.requiresDirectImage) {
-        if (data.instagramUrl) {
-          setInstagramUrl(data.instagramUrl);
+        if (data.instagramUrl || explicitPostUrl) {
+          setInstagramUrl(data.instagramUrl || explicitPostUrl || "");
         }
         setInstagramNotice(data.message);
       } else {
@@ -300,56 +355,136 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
       )}
 
       {/* Instagram Fast Ingest Card */}
-      <div className="mb-6 p-4 sm:p-5 bg-gradient-to-r from-pink-50/70 via-purple-50/50 to-[#F4F0EA] border border-pink-200/90 rounded-2xl shadow-xs">
-        <div className="flex items-center justify-between gap-3 mb-2">
+      <div className="mb-6 p-4 sm:p-5 bg-gradient-to-br from-pink-50/80 via-[#FAF7F2] to-purple-50/60 border border-pink-200/90 rounded-2xl shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-pink-200/50">
           <div className="flex items-center gap-2">
-            <InstagramIcon className="w-4 h-4 text-pink-600 shrink-0" />
-            <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-stone-900 font-sans">
-              Import from Instagram
-            </span>
+            <InstagramIcon className="w-5 h-5 text-pink-600 shrink-0" />
+            <div>
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-stone-900 font-sans block">
+                Instagram Direct Importer
+              </span>
+              <span className="text-[11px] text-stone-500 font-sans">
+                Permanent WebP pipeline &bull; No manual image re-downloads needed
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] font-mono text-stone-500 bg-white/60 px-2 py-0.5 rounded border border-stone-200 hidden sm:inline">
-            Ctrl+V Supported
+          <span className="text-[11px] font-mono text-stone-600 bg-white/80 px-2.5 py-1 rounded-full border border-pink-200 shadow-xs">
+            Ctrl+V Image Supported
           </span>
         </div>
-        <p className="text-xs text-stone-600 mb-3 font-sans leading-relaxed">
-          Paste your Instagram post link or photo address. We will download the photo, compress it to permanent WebP, and auto-link your post so visitors can like and comment.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            value={instagramInputUrl}
-            onChange={(e) => setInstagramInputUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleInstagramImport();
-              }
-            }}
-            placeholder="https://www.instagram.com/p/... or image address"
-            className="flex-1 px-3.5 py-2 text-xs sm:text-sm bg-white border border-[#DDD6CA] focus:border-pink-500 focus:outline-none rounded-lg text-stone-900 placeholder:text-stone-400 font-mono"
-          />
-          <button
-            type="button"
-            disabled={fetchingInstagram || !instagramInputUrl.trim()}
-            onClick={() => handleInstagramImport()}
-            className="px-4 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 disabled:opacity-50 text-white font-sans text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-          >
-            {fetchingInstagram ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Importing...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>Fetch & Import</span>
-              </>
+
+        {/* Option A: 1-Click Browser Bookmarklet (Recommended) */}
+        <div className="p-3.5 bg-white/90 border border-pink-100 rounded-xl space-y-2.5 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-bold uppercase tracking-wide rounded">
+                Recommended &bull; 1-Click
+              </span>
+              <span className="text-xs font-bold text-stone-900">
+                Instagram Importer Bookmarklet
+              </span>
+            </div>
+
+            {bookmarkletCode && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(bookmarkletCode);
+                    setCopiedBookmarklet(true);
+                    setTimeout(() => setCopiedBookmarklet(false), 2500);
+                  } catch {
+                    alert("Could not copy to clipboard. Drag the button directly to your bookmarks bar.");
+                  }
+                }}
+                className="text-[11px] font-semibold text-stone-600 hover:text-stone-900 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                {copiedBookmarklet ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Script Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Bookmarklet Code</span>
+                  </>
+                )}
+              </button>
             )}
-          </button>
+          </div>
+
+          <p className="text-xs text-stone-600 leading-relaxed">
+            Instagram blocks outside servers from opening post links. To import with 1 click, drag this button to your browser bookmarks bar once:
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {bookmarkletCode ? (
+              <a
+                href={bookmarkletCode}
+                onClick={(e) => {
+                  // If clicked inside the admin panel, explain how to use it
+                  e.preventDefault();
+                  alert(
+                    "👉 Drag this button up to your browser Bookmarks Bar (Ctrl+Shift+B to show bookmarks bar).\n\nThen whenever you view any of your photos on Instagram, just click that bookmark! It will automatically load the high-res photo and caption into this uploader."
+                  );
+                }}
+                title="Drag to your Bookmarks Bar!"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-sans text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-grab active:cursor-grabbing select-none"
+              >
+                <Bookmark className="w-3.5 h-3.5 fill-current" />
+                <span>📸 Import to Azizography</span>
+              </a>
+            ) : null}
+
+            <span className="text-[11px] text-stone-500 italic">
+              (Drag button to bookmarks bar &rarr; Open Instagram post &rarr; Click bookmark)
+            </span>
+          </div>
         </div>
+
+        {/* Option B: Direct URL or Image Address Ingest */}
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-700">
+            Or Paste Image Address / Post CDN Link:
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={instagramInputUrl}
+              onChange={(e) => setInstagramInputUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleInstagramImport();
+                }
+              }}
+              placeholder="https://scontent...cdninstagram.com/... or direct image link"
+              className="flex-1 px-3.5 py-2 text-xs sm:text-sm bg-white border border-[#DDD6CA] focus:border-pink-500 focus:outline-none rounded-lg text-stone-900 placeholder:text-stone-400 font-mono"
+            />
+            <button
+              type="button"
+              disabled={fetchingInstagram || !instagramInputUrl.trim()}
+              onClick={() => handleInstagramImport()}
+              className="px-4 py-2 bg-[#1C1917] hover:bg-stone-800 disabled:opacity-50 text-white font-sans text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+            >
+              {fetchingInstagram ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Importing...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Fetch Image</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
         {instagramNotice && (
-          <div className="mt-3 p-3 bg-white/90 border border-pink-200 rounded-xl text-xs font-sans text-stone-800 leading-relaxed flex items-start gap-2 shadow-xs">
+          <div className="p-3 bg-white/95 border border-pink-200 rounded-xl text-xs font-sans text-stone-800 leading-relaxed flex items-start gap-2 shadow-xs">
             <Sparkles className="w-4 h-4 text-pink-600 shrink-0 mt-0.5" />
             <span>{instagramNotice}</span>
           </div>

@@ -35,7 +35,33 @@ function AdminDashboardContent() {
   const [showAboutEditor, setShowAboutEditor] = useState(false);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [importData, setImportData] = useState<{
+    imageUrl?: string;
+    postUrl?: string;
+    caption?: string;
+  } | null>(null);
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if opened from Instagram Bookmarklet
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const img = params.get("import_img");
+      const post = params.get("import_post");
+      const caption = params.get("import_caption");
+
+      if (img) {
+        setImportData({
+          imageUrl: img,
+          postUrl: post || undefined,
+          caption: caption || undefined,
+        });
+        setShowUploader(true);
+        // Clean URL query parameters quietly without a page reload
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, []);
 
   // Auth Guard
   useEffect(() => {
@@ -228,11 +254,16 @@ function AdminDashboardContent() {
         {showUploader && (
           <div className="animate-in fade-in duration-150">
             <ImageUploader
+              initialImportData={importData}
               onSuccess={() => {
                 setShowUploader(false);
+                setImportData(null);
                 showNotice("Photograph published to portfolio");
               }}
-              onCancel={() => setShowUploader(false)}
+              onCancel={() => {
+                setShowUploader(false);
+                setImportData(null);
+              }}
             />
           </div>
         )}
