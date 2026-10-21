@@ -301,33 +301,39 @@ export default function ImageUploader({
         ])
       );
 
-      // 1. Parallel fetch all selected image URLs from our API
-      const res = await fetch("/api/admin/instagram-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: targets, postUrl: instagramUrl || undefined }),
-      });
-      const data = await res.json();
-      if (!data.success || !data.items || data.items.length === 0) {
-        throw new Error(data.message || "Failed to download carousel photos.");
-      }
-
+      // 1. Process and upload each selected photo sequentially to prevent payload timeouts & memory limits
       const itemsToCreate: Array<Omit<GalleryItem, "id" | "createdAt" | "orderIndex">> = [];
 
-      // 2. Process, compress to WebP at high fidelity (quality: 0.90, max: 2560px), and prepare batch
-      for (let i = 0; i < data.items.length; i++) {
-        setBatchProgress({ current: i + 1, total: data.items.length });
-        const item = data.items[i];
+      for (let i = 0; i < targets.length; i++) {
+        setBatchProgress({ current: i + 1, total: targets.length });
+        const targetUrl = targets[i];
 
-        const blob = await fetch(item.dataUrl).then((r) => r.blob());
+        let imageSource = targetUrl;
+        // Proxy fetch through our API route to bypass CORS (same reliable endpoint used by single upload)
+        try {
+          const res = await fetch("/api/admin/instagram-import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: targetUrl, postUrl: instagramUrl || undefined }),
+          });
+          const data = await res.json();
+          if (data.success && data.dataUrl) {
+            imageSource = data.dataUrl;
+          }
+        } catch (fetchErr) {
+          console.warn(`Proxy fetch notice for photograph ${i + 1}:`, fetchErr);
+        }
+
+        const blob = await fetch(imageSource).then((r) => r.blob());
         const rawFile = new File([blob], `carousel_${Date.now()}_${i + 1}.jpg`, {
           type: blob.type || "image/jpeg",
         });
 
         const webpResult = await convertAndCompressToWebP(rawFile, {
-          maxWidth: 2560,
-          maxHeight: 2560,
-          quality: 0.90,
+          maxWidth: 2048,
+          maxHeight: 2048,
+          quality: 0.85,
+          maxSizeBytes: 600 * 1024,
         });
 
         const uploadResult = await uploadImageFile(webpResult.file);
@@ -338,7 +344,7 @@ export default function ImageUploader({
         else if (ratio < 0.65) itemAspect = "tall";
         else if (ratio >= 0.88 && ratio <= 1.12) itemAspect = "square";
 
-        const itemTitle = data.items.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
+        const itemTitle = targets.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
 
         const cleanExif: Record<string, string> = {};
         if (camera.trim()) cleanExif.camera = camera.trim();
@@ -370,6 +376,10 @@ export default function ImageUploader({
           instagramUrl: instagramUrl.trim() || undefined,
           exif: hasExif ? cleanExif : undefined,
         });
+      }
+
+      if (itemsToCreate.length === 0) {
+        throw new Error("No photographs could be processed from the carousel.");
       }
 
       await createMultipleGalleryItems(itemsToCreate);

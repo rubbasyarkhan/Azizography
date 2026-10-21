@@ -99,8 +99,9 @@ export async function convertAndCompressToWebP(
 
   let maxWidth = options?.maxWidth || 2560;
   let maxHeight = options?.maxHeight || 2560;
-  let quality = typeof options?.quality === "number" ? options?.quality : 0.90;
-  const maxSizeBytes = options?.maxSizeBytes || 5 * 1024 * 1024; // 5 MB high-fidelity limit
+  let quality = typeof options?.quality === "number" ? options?.quality : 0.85;
+  // Default to 600 KB so dataUrl is <= 850,000 chars, safely within Firestore 1MB document limit & rules
+  const maxSizeBytes = options?.maxSizeBytes || 600 * 1024;
 
   let originalSize = 0;
   let filename = options?.filename || "photograph.webp";
@@ -176,16 +177,17 @@ export async function convertAndCompressToWebP(
   };
 
   let blob = await encodeBlob(quality);
+  let dataUrl = canvas.toDataURL("image/webp", quality);
 
-  // Adaptive compression loop: only tune down if file exceeds 5MB
+  // Adaptive compression loop: ensure file size and dataUrl length safely respect Firestore limits (1MB doc, 1M char string)
   let attempts = 0;
-  while (blob.size > maxSizeBytes && attempts < 3) {
+  while ((blob.size > maxSizeBytes || dataUrl.length > 850000) && attempts < 5) {
     attempts++;
-    quality = Math.max(0.78, quality - 0.05);
+    quality = Math.max(0.70, quality - 0.05);
 
-    if (attempts >= 2 && (targetWidth > 2048 || targetHeight > 2048)) {
-      targetWidth = Math.round(targetWidth * 0.90);
-      targetHeight = Math.round(targetHeight * 0.90);
+    if (attempts >= 2 && (targetWidth > 1800 || targetHeight > 1800)) {
+      targetWidth = Math.round(targetWidth * 0.88);
+      targetHeight = Math.round(targetHeight * 0.88);
       canvas.width = targetWidth;
       canvas.height = targetHeight;
       ctx.imageSmoothingEnabled = true;
@@ -194,10 +196,8 @@ export async function convertAndCompressToWebP(
     }
 
     blob = await encodeBlob(quality);
+    dataUrl = canvas.toDataURL("image/webp", quality);
   }
-
-  // Generate dataUrl once for the final optimized canvas state
-  const dataUrl = canvas.toDataURL("image/webp", quality);
 
   // Create a micro 24px blur placeholder for instantaneous zero-glitch display
   let blurDataUrl: string | undefined = undefined;

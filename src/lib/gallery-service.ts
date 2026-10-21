@@ -374,18 +374,26 @@ export function subscribeToFooterTrailItems(callback: (items: GalleryItem[]) => 
 
 // Update multiple items order
 export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void> {
-  const normalizedItems = items.map((item, index) => ({
+  const normalizedItems = items.map((item, idx) => ({
     ...item,
-    orderIndex: index,
+    orderIndex: idx,
   }));
 
   saveLocalItems(normalizedItems);
 
   if (isFirebaseConfigured && db) {
     try {
+      // Query existing doc IDs to avoid NOT_FOUND errors on unverified local documents
+      const snap = await getDocs(collection(db, "gallery_items"));
+      const existingFirestoreIds = new Set(snap.docs.map((d) => d.id));
+
+      const itemsToUpdate = normalizedItems.filter((item) =>
+        existingFirestoreIds.has(item.id)
+      );
+
       const CHUNK_SIZE = 450;
-      for (let c = 0; c < normalizedItems.length; c += CHUNK_SIZE) {
-        const chunk = normalizedItems.slice(c, c + CHUNK_SIZE);
+      for (let c = 0; c < itemsToUpdate.length; c += CHUNK_SIZE) {
+        const chunk = itemsToUpdate.slice(c, c + CHUNK_SIZE);
         const batch = writeBatch(db);
         for (const item of chunk) {
           const itemRef = doc(db, "gallery_items", item.id);
@@ -394,7 +402,7 @@ export async function syncGalleryItemsOrder(items: GalleryItem[]): Promise<void>
         await batch.commit();
       }
     } catch (err) {
-      console.warn("Firestore order sync pending rules authorization. Order saved in local storage:", err);
+      console.warn("Firestore order sync notice:", err);
     }
   }
 }
@@ -554,22 +562,17 @@ export async function createGalleryItem(
 
   if (isFirebaseConfigured && db) {
     try {
-      const CHUNK_SIZE = 450;
-      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
-        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
-        const batch = writeBatch(db);
-        for (const item of chunk) {
-          const docRef = doc(db, "gallery_items", item.id);
-          if (item.id === newId) {
-            batch.set(docRef, cleanFirestoreData(item));
-          } else {
-            batch.update(docRef, { orderIndex: item.orderIndex });
-          }
-        }
-        await batch.commit();
-      }
+      // 1. Write the new document independently
+      const docRef = doc(db, "gallery_items", newId);
+      await setDoc(docRef, cleanFirestoreData(newItem));
+
+      // 2. Synchronize existing items order in the background without blocking
+      syncGalleryItemsOrder(updatedItems).catch((err) =>
+        console.warn("Background order sync notice:", err)
+      );
     } catch (err) {
-      console.warn("Firestore document write notice:", err);
+      console.error("Firestore document write error:", err);
+      throw err;
     }
   }
 
@@ -599,23 +602,20 @@ export async function createMultipleGalleryItems(
 
   if (isFirebaseConfigured && db) {
     try {
-      const newItemIds = new Set(newItems.map((n) => n.id));
-      const CHUNK_SIZE = 450;
-      for (let c = 0; c < updatedItems.length; c += CHUNK_SIZE) {
-        const chunk = updatedItems.slice(c, c + CHUNK_SIZE);
-        const batch = writeBatch(db);
-        for (const item of chunk) {
-          const docRef = doc(db, "gallery_items", item.id);
-          if (newItemIds.has(item.id)) {
-            batch.set(docRef, cleanFirestoreData(item));
-          } else {
-            batch.update(docRef, { orderIndex: item.orderIndex });
-          }
-        }
-        await batch.commit();
+      // Write each new item directly to Firestore with setDoc
+      // This guarantees each new item is saved reliably without depending on legacy items
+      for (const item of newItems) {
+        const docRef = doc(db, "gallery_items", item.id);
+        await setDoc(docRef, cleanFirestoreData(item));
       }
+
+      // Synchronize overall order in the background
+      syncGalleryItemsOrder(updatedItems).catch((err) =>
+        console.warn("Background order sync notice:", err)
+      );
     } catch (err) {
-      console.warn("Firestore batch write notice:", err);
+      console.error("Firestore batch write error:", err);
+      throw err;
     }
   }
 
