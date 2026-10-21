@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import Image from "next/image";
 import { GalleryCategory, GalleryItem } from "@/types/gallery";
 import { uploadImageFile, createGalleryItem, createMultipleGalleryItems } from "@/lib/gallery-service";
+import { getAllCategories, addCustomCategory, CategoryOption } from "@/lib/category-service";
 import {
   convertAndCompressToWebP,
   formatBytes,
@@ -55,6 +56,11 @@ export default function ImageUploader({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<GalleryCategory>("people");
+  const [availableCategories, setAvailableCategories] = useState<CategoryOption[]>(() =>
+    getAllCategories()
+  );
+  const [isAddingNewCat, setIsAddingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
   const [artist, setArtist] = useState("");
   const [location, setLocation] = useState("");
   const [year, setYear] = useState(new Date().getFullYear().toString());
@@ -1004,16 +1010,58 @@ export default function ImageUploader({
                   <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as GalleryCategory)}
+                  value={isAddingNewCat ? "__new__" : category}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setIsAddingNewCat(true);
+                    } else {
+                      setIsAddingNewCat(false);
+                      setCategory(e.target.value as GalleryCategory);
+                    }
+                  }}
                   className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
                 >
-                  <option value="people">Portraits & People</option>
-                  <option value="concerts">Live & Concerts</option>
-                  <option value="singers">Vocalists & Singers</option>
-                  <option value="weddings">Weddings & Ceremonies</option>
-                  <option value="events">Festivals & Events</option>
+                  {availableCategories.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add New Category...</option>
                 </select>
+
+                {isAddingNewCat && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCatInput}
+                      onChange={(e) => setNewCatInput(e.target.value)}
+                      placeholder="e.g. Street Photography"
+                      className="flex-1 bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-1.5 text-xs sm:text-sm text-[#1C1917] rounded-lg focus:outline-none focus:border-[#1C1917]"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newCatInput.trim()) return;
+                        const added = await addCustomCategory(newCatInput.trim());
+                        setAvailableCategories(getAllCategories());
+                        setCategory(added.key);
+                        setIsAddingNewCat(false);
+                        setNewCatInput("");
+                      }}
+                      className="px-3 py-1.5 bg-[#1C1917] text-white text-xs font-semibold rounded-lg hover:bg-stone-800"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewCat(false)}
+                      className="px-2 py-1.5 text-stone-500 hover:text-stone-800 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

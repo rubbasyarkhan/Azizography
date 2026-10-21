@@ -25,10 +25,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { GalleryItem, GalleryCategory } from "@/types/gallery";
 import {
   itemMatchesFilter,
-  itemMatchesSearch,
   getCategoryDisplayLabel,
   normalizeCategory,
 } from "@/lib/filter-utils";
+import { getAllCategories, addCustomCategory } from "@/lib/category-service";
 import {
   GripVertical,
   Eye,
@@ -40,9 +40,9 @@ import {
   Grid,
   List,
   Sparkles,
-  Search,
   Upload,
-  MousePointer,
+  Plus,
+  X,
   ArrowUpRight,
 } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
@@ -155,15 +155,6 @@ const SortableCard = React.memo(function SortableCard({
                 <Sparkles className="w-3.5 h-3.5" />
               </span>
             )}
-
-            {item.isFooterTrailItem && (
-              <span
-                className="p-1.5 bg-[#FAF7F2]/95 border border-[#DDD6CA] text-[#1C1917] rounded-md backdrop-blur-sm shadow-xs"
-                title="Active in Footer Mouse Trail"
-              >
-                <MousePointer className="w-3.5 h-3.5" />
-              </span>
-            )}
           </div>
         </div>
 
@@ -196,22 +187,6 @@ const SortableCard = React.memo(function SortableCard({
               }`}
             >
               <Sparkles className="w-4 h-4" />
-            </button>
-          )}
-
-          {/* Toggle Footer Trail */}
-          {onToggleFooterTrail && (
-            <button
-              type="button"
-              onClick={() => onToggleFooterTrail(item.id, !item.isFooterTrailItem)}
-              title={item.isFooterTrailItem ? "Remove from footer mouse trail" : "Add to footer mouse trail"}
-              className={`p-2 rounded-lg backdrop-blur-sm border transition-colors cursor-pointer shadow-xs ${
-                item.isFooterTrailItem
-                  ? "bg-[#1C1917] text-[#FAF7F2] border-[#1C1917]"
-                  : "bg-[#FAF7F2]/95 border-[#DDD6CA] text-stone-800 hover:bg-[#1C1917] hover:text-[#FAF7F2]"
-              }`}
-            >
-              <MousePointer className="w-4 h-4" />
             </button>
           )}
 
@@ -290,73 +265,32 @@ function DndBoard({
 }: DndBoardProps) {
   const [viewMode, setViewMode] = useState<"grid" | "kanban" | "table">("grid");
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [showAddCatModal, setShowAddCatModal] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
+  const [catError, setCatError] = useState<string | null>(null);
 
-  const categories: GalleryCategory[] = ["people", "concerts", "singers", "weddings", "events"];
-
-  // Dynamic filter buttons representing categories, series, and tags present in the archive
-  const dynamicFilters = useMemo(() => {
-    const list: { key: string; label: string; count: number }[] = [];
-    const seen = new Set<string>();
-
-    // 1. Standard categories
-    for (const cat of categories) {
-      const count = items.filter((i) => normalizeCategory(i.category) === cat).length;
-      if (count > 0 || items.length === 0) {
-        const label = getCategoryDisplayLabel(cat);
-        seen.add(cat.toLowerCase());
-        seen.add(label.toLowerCase());
-        list.push({ key: cat, label, count });
-      }
-    }
-
-    // 2. Custom series/projects
-    for (const item of items) {
-      if (item.seriesOrProject && item.seriesOrProject.trim()) {
-        const val = item.seriesOrProject.trim();
-        const key = val.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          const count = items.filter((i) => itemMatchesFilter(i, val)).length;
-          list.push({ key: val, label: val, count });
-        }
-      }
-    }
-
-    // 3. Distinct tags (e.g. "testing", "tesying description")
-    for (const item of items) {
-      if (item.tags && Array.isArray(item.tags)) {
-        for (const tag of item.tags) {
-          const val = tag.trim();
-          const key = val.toLowerCase();
-          if (!seen.has(key) && !seen.has(normalizeCategory(key))) {
-            seen.add(key);
-            const count = items.filter((i) => itemMatchesFilter(i, val)).length;
-            list.push({ key: val, label: `#${val}`, count });
-          }
-        }
-      }
-    }
-
-    return list;
-  }, [items, categories]);
+  // Dynamic category filters (only categories, no series, no hashtags)
+  const categoryFilters = useMemo(() => {
+    const allCats = getAllCategories(items);
+    return allCats
+      .map((cat) => {
+        const count = items.filter(
+          (i) => normalizeCategory(i.category) === cat.key
+        ).length;
+        return { key: cat.key, label: cat.label, count };
+      })
+      .filter((c) => c.count > 0 || items.length === 0);
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      // Category, series, or tag filter
       if (!itemMatchesFilter(item, filterCategory)) {
         return false;
       }
-
-      // Text search query
-      if (searchQuery.trim() && !itemMatchesSearch(item, searchQuery)) {
-        return false;
-      }
-
       return true;
     });
-  }, [items, filterCategory, searchQuery]);
+  }, [items, filterCategory]);
 
   const filteredItemIds = useMemo(() => filteredItems.map((i) => i.id), [filteredItems]);
 
@@ -427,23 +361,26 @@ function DndBoard({
     );
   }
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatInput.trim()) return;
+    try {
+      const added = await addCustomCategory(newCatInput.trim());
+      setFilterCategory(added.key);
+      setNewCatInput("");
+      setShowAddCatModal(false);
+      setCatError(null);
+    } catch (err: unknown) {
+      const e = err as Error;
+      setCatError(e.message || "Failed to add category");
+    }
+  };
+
   return (
     <div className="space-y-6 font-admin">
-      {/* Search & Category Filter Toolbar with Big Fonts */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-[#FAF7F2] border border-[#DDD6CA] rounded-xl shadow-xs">
-        {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search title, series, artist, or tags..."
-            className="w-full bg-[#F4F0EA] border border-[#DDD6CA] pl-10 pr-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 focus:outline-none focus:border-[#1C1917] text-sm rounded-lg transition-colors font-medium shadow-xs"
-          />
-        </div>
-
-        {/* Filter Pills with Big Fonts */}
+      {/* Category Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-[#FAF7F2] border border-[#DDD6CA] rounded-xl shadow-xs">
+        {/* Filter Pills: All, Iris Ring, Categories, + Add Category */}
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button
             type="button"
@@ -468,33 +405,34 @@ function DndBoard({
             <Sparkles className="w-3.5 h-3.5" />
             <span>Iris Ring ({items.filter((i) => i.isIrisItem).length})</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setFilterCategory("trail")}
-            className={`px-3.5 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 font-semibold ${
-              filterCategory === "trail"
-                ? "bg-[#1C1917] text-[#FAF7F2] shadow-sm"
-                : "bg-[#FAF7F2] text-stone-700 hover:text-[#1C1917] hover:bg-[#EAE4D9] border border-[#DDD6CA]"
-            }`}
-          >
-            <MousePointer className="w-3.5 h-3.5" />
-            <span>Footer Trail ({items.filter((i) => i.isFooterTrailItem).length})</span>
-          </button>
-          {dynamicFilters.map((df) => (
+          {categoryFilters.map((cf) => (
             <button
-              key={df.key}
+              key={cf.key}
               type="button"
-              onClick={() => setFilterCategory(df.key)}
+              onClick={() => setFilterCategory(cf.key)}
               className={`px-3.5 py-2 rounded-lg transition-colors cursor-pointer font-semibold ${
-                filterCategory === df.key ||
-                normalizeCategory(filterCategory) === normalizeCategory(df.key)
+                filterCategory === cf.key ||
+                normalizeCategory(filterCategory) === normalizeCategory(cf.key)
                   ? "bg-[#1C1917] text-[#FAF7F2] shadow-sm"
                   : "bg-[#FAF7F2] text-stone-700 hover:text-[#1C1917] hover:bg-[#EAE4D9] border border-[#DDD6CA]"
               }`}
             >
-              {df.label} ({df.count})
+              {cf.label} ({cf.count})
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowAddCatModal(true);
+              setCatError(null);
+            }}
+            className="px-3.5 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 font-semibold text-stone-700 hover:text-[#1C1917] hover:bg-[#EAE4D9] border border-dashed border-[#DDD6CA]"
+            title="Add new category"
+          >
+            <Plus className="w-3.5 h-3.5 text-stone-600" />
+            <span>Add Category</span>
+          </button>
         </div>
 
         {/* View Mode Toggle with Big Fonts */}
@@ -576,12 +514,12 @@ function DndBoard({
         ) : viewMode === "kanban" ? (
           /* Category Kanban Columns */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-            {categories.map((cat) => {
-              const catItems = filteredItems.filter((i) => normalizeCategory(i.category) === cat);
-              const catLabel = getCategoryDisplayLabel(cat);
+            {categoryFilters.map((cf) => {
+              const catItems = filteredItems.filter((i) => normalizeCategory(i.category) === cf.key);
+              const catLabel = cf.label;
               return (
                 <div
-                  key={cat}
+                  key={cf.key}
                   className="bg-[#FAF7F2] border border-[#DDD6CA] p-4 flex flex-col min-h-[500px] rounded-xl shadow-xs"
                 >
                   <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#DDD6CA] text-sm">
@@ -687,12 +625,6 @@ function DndBoard({
                             <span>Iris</span>
                           </span>
                         )}
-                        {item.isFooterTrailItem && (
-                          <span className="px-2.5 py-1 bg-[#F4F0EA] border border-[#DDD6CA] text-stone-800 rounded-md text-xs font-semibold flex items-center gap-1">
-                            <MousePointer className="w-3 h-3" />
-                            <span>Trail</span>
-                          </span>
-                        )}
                         {item.isFeatured && (
                           <span className="p-1.5 bg-[#F4F0EA] border border-[#DDD6CA] text-[#1C1917] rounded-md">
                             <Star className="w-3 h-3 fill-current" />
@@ -710,20 +642,6 @@ function DndBoard({
                         >
                           {item.isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                         </button>
-                        {onToggleFooterTrail && (
-                          <button
-                            type="button"
-                            onClick={() => onToggleFooterTrail(item.id, !item.isFooterTrailItem)}
-                            className={`p-2 transition-colors cursor-pointer rounded-lg border ${
-                              item.isFooterTrailItem
-                                ? "bg-[#1C1917] text-[#FAF7F2] border-[#1C1917]"
-                                : "hover:bg-[#1C1917] hover:text-[#FAF7F2] text-stone-600 border-transparent hover:border-[#1C1917]"
-                            }`}
-                            title={item.isFooterTrailItem ? "Remove from footer trail" : "Add to footer trail"}
-                          >
-                            <MousePointer className="w-4 h-4" />
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => onEditItem(item)}
@@ -774,6 +692,59 @@ function DndBoard({
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Add Category Modal */}
+      {showAddCatModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#FAF7F2] border border-[#DDD6CA] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 font-admin animate-fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-[#DDD6CA]">
+              <h4 className="text-lg font-bold text-[#1C1917]">Add New Category</h4>
+              <button
+                type="button"
+                onClick={() => setShowAddCatModal(false)}
+                className="p-1 text-stone-400 hover:text-stone-700 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCategory} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={newCatInput}
+                  onChange={(e) => setNewCatInput(e.target.value)}
+                  placeholder="e.g. Street Photography, Architecture"
+                  className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-sm text-[#1C1917] rounded-lg focus:outline-none focus:border-[#1C1917]"
+                />
+                {catError && (
+                  <p className="text-xs text-red-600 mt-1.5 font-medium">{catError}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCatModal(false)}
+                  className="px-3.5 py-2 text-stone-600 hover:text-stone-900 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#1C1917] hover:bg-[#292524] text-[#FAF7F2] text-sm font-semibold rounded-lg shadow-sm"
+                >
+                  Create Category
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
