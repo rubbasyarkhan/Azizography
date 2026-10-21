@@ -1292,29 +1292,40 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
     >
       {captions && current && revealed && (
         <div className="flex-carousel__caption">
-          <span key={active} className="flex-carousel__title">
-            {current.title || current.alt}
-            {current.subtitle && <span className="flex-carousel__subtitle">{current.subtitle}</span>}
-          </span>
-          {current.instagramUrl && (
-            <a
-              href={current.instagramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-carousel__instagram"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <InstagramIcon className="w-3 h-3 text-pink-400 shrink-0" />
-              <span>Like on Instagram</span>
-              <ArrowUpRight className="w-3 h-3 text-white/70 shrink-0" />
-            </a>
-          )}
-          <span className="flex-carousel__count" data-hidden={focusOpen ? '' : undefined}>
-            <Digits value={active + 1} />
-            <span className="flex-carousel__slash">/</span>
-            <span>{String(list.length).padStart(2, '0')}</span>
-          </span>
+          <div key={active} className="flex-carousel__meta">
+            <h2 className="flex-carousel__title">
+              {current.title || current.alt}
+            </h2>
+            {current.subtitle && (
+              <p className="flex-carousel__subtitle">
+                {current.subtitle}
+              </p>
+            )}
+          </div>
+          <div className="flex-carousel__actions">
+            {current.instagramUrl && (
+              <a
+                href={current.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-carousel__instagram"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <InstagramIcon className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                <span>Like on Instagram</span>
+                <ArrowUpRight className="w-3 h-3 text-white/70 shrink-0" />
+              </a>
+            )}
+            {current.instagramUrl && (
+              <span className="flex-carousel__divider" aria-hidden="true">•</span>
+            )}
+            <span className="flex-carousel__count" data-hidden={focusOpen ? '' : undefined}>
+              <Digits value={active + 1} />
+              <span className="flex-carousel__slash">/</span>
+              <span>{String(list.length).padStart(2, '0')}</span>
+            </span>
+          </div>
         </div>
       )}
       <div className="flex-carousel__live" aria-live="polite" aria-atomic="true">
