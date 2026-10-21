@@ -393,7 +393,7 @@ export default function ImageUploader({ onSuccess, onCancel }: ImageUploaderProp
                 className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
               />
               <p className="text-xs text-stone-500 mt-1">
-                Allows visitors to click &quot;View and comment on Instagram ↗&quot; to open the post directly in a new tab.
+                Allows visitors to click &quot;Like on Instagram ↗&quot; to open the post directly in a new tab.
               </p>
             </div>
 

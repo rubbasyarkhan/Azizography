@@ -3,6 +3,8 @@
 
 import React, { useEffect, useRef, useState, CSSProperties } from 'react';
 import { Renderer, Program, Mesh, Triangle, Plane, Texture, RenderTarget } from 'ogl';
+import { ArrowUpRight } from 'lucide-react';
+import InstagramIcon from '@/components/icons/InstagramIcon';
 
 import './FlexCarousel.css';
 
@@ -14,6 +16,7 @@ export interface FlexCarouselItem {
   aspect?: number;
   width?: number;
   height?: number;
+  instagramUrl?: string;
 }
 
 export interface FlexCarouselProps {
@@ -1288,11 +1291,25 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
       tabIndex={0}
     >
       {captions && current && revealed && (
-        <div className="flex-carousel__caption" aria-hidden="true">
+        <div className="flex-carousel__caption">
           <span key={active} className="flex-carousel__title">
             {current.title || current.alt}
             {current.subtitle && <span className="flex-carousel__subtitle">{current.subtitle}</span>}
           </span>
+          {current.instagramUrl && (
+            <a
+              href={current.instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-carousel__instagram"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <InstagramIcon className="w-3 h-3 text-pink-400 shrink-0" />
+              <span>Like on Instagram</span>
+              <ArrowUpRight className="w-3 h-3 text-white/70 shrink-0" />
+            </a>
+          )}
           <span className="flex-carousel__count" data-hidden={focusOpen ? '' : undefined}>
             <Digits value={active + 1} />
             <span className="flex-carousel__slash">/</span>

@@ -161,7 +161,7 @@ const SortableImageCard = React.memo(function SortableImageCard({
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/20 hover:bg-white text-white hover:text-black backdrop-blur-md rounded text-[10px] font-syne uppercase tracking-wider transition-all"
               >
                 <InstagramIcon className="w-3 h-3 text-pink-400" />
-                <span>View and comment on Instagram</span>
+                <span>Like on Instagram</span>
                 <ArrowUpRight className="w-3 h-3" />
               </a>
             </div>
@@ -252,7 +252,7 @@ const SortableImageCard = React.memo(function SortableImageCard({
               className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-stone-700 hover:text-black group/insta transition-colors"
             >
               <InstagramIcon className="w-3 h-3 text-pink-600 shrink-0" />
-              <span className="underline underline-offset-2">View and comment on Instagram</span>
+              <span className="underline underline-offset-2">Like on Instagram</span>
               <ArrowUpRight className="w-3 h-3 group-hover/insta:translate-x-0.5 group-hover/insta:-translate-y-0.5 transition-transform" />
             </a>
           </div>

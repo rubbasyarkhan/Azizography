@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import Image from "next/image";
 
-import { subscribeToIrisItems } from "@/lib/gallery-service";
+import { subscribeToIrisItems, getIrisItems } from "@/lib/gallery-service";
 import { getOptimizedImageUrl } from "@/lib/image-utils";
 
 interface IrisGalleryProps {
@@ -11,30 +11,46 @@ interface IrisGalleryProps {
   onComplete?: () => void;
 }
 
-// Fallback iris portraits when no database items exist
-const DEFAULT_IRIS_PHOTOS: string[] = [];
-
 export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
   const centerTextRef = useRef<HTMLDivElement>(null);
-  const [photoUrls, setPhotoUrls] = useState<string[]>(DEFAULT_IRIS_PHOTOS);
+  
+  // Eagerly initialize with cached or seed iris items so first-time visitors see iris immediately
+  const [photoUrls, setPhotoUrls] = useState<string[]>(() => {
+    try {
+      const iris = getIrisItems();
+      const dynamicUrls = iris
+        .filter((i) => i.isIrisItem && i.imageUrl)
+        .map((i) => getOptimizedImageUrl(i.imageUrl, 280, 60))
+        .filter(Boolean);
+      if (dynamicUrls.length > 0) {
+        let finalUrls = [...dynamicUrls];
+        while (finalUrls.length < 24) {
+          finalUrls = [...finalUrls, ...dynamicUrls];
+        }
+        return finalUrls.slice(0, 24);
+      }
+    } catch {
+      // fallback
+    }
+    return [];
+  });
 
   // Subscribe to dynamic Iris photos from gallery service
   useEffect(() => {
     const unsub = subscribeToIrisItems((items) => {
       const dynamicUrls = items
-        .filter((i) => i.isIrisItem)
-        .map((i) => getOptimizedImageUrl(i.imageUrl, 280, 60));
+        .filter((i) => i.isIrisItem && i.imageUrl)
+        .map((i) => getOptimizedImageUrl(i.imageUrl, 280, 60))
+        .filter(Boolean);
       if (dynamicUrls.length > 0) {
-        // Ensure at least 20 items by repeating if necessary
+        // Ensure at least 24 items for full circle blades
         let finalUrls = [...dynamicUrls];
         while (finalUrls.length < 24) {
           finalUrls = [...finalUrls, ...dynamicUrls];
         }
         setPhotoUrls(finalUrls.slice(0, 24));
-      } else {
-        setPhotoUrls(DEFAULT_IRIS_PHOTOS);
       }
     });
     return () => unsub();
@@ -80,9 +96,17 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
   useEffect(() => {
     if (!active) return;
 
+    // If waiting for photos to load from Firestore/cache on fresh device
+    if (photoUrls.length === 0) {
+      const safetyTimeout = setTimeout(() => {
+        onComplete?.();
+      }, 4000);
+      return () => clearTimeout(safetyTimeout);
+    }
+
     let animFrameId: number;
     const startTime = performance.now();
-    const totalDuration = photoUrls.length > 0 ? 4600 : 2200; // 4.6s when iris images present, 2.2s for clean title welcome
+    const totalDuration = 4600; // 4.6s full cinematic iris expansion
     const numCards = photoUrls.length;
 
     const animate = (now: number) => {
@@ -144,7 +168,7 @@ export default function IrisGallery({ active, onComplete }: IrisGalleryProps) {
     return () => {
       cancelAnimationFrame(animFrameId);
     };
-  }, [active, dimensions, onComplete]);
+  }, [active, dimensions, onComplete, photoUrls.length]);
 
   if (!active) return null;
 

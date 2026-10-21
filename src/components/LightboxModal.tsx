@@ -78,6 +78,7 @@ export default function LightboxModal({
         aspect,
         width: itm.width || (aspect > 1 ? 1600 : 1200),
         height: itm.height || (aspect > 1 ? 1067 : 1600),
+        instagramUrl: itm.instagramUrl,
       };
     });
   }, [items]);
@@ -102,20 +103,6 @@ export default function LightboxModal({
         </div>
 
         <div className="flex items-center gap-3">
-          {item.instagramUrl && (
-            <a
-              href={item.instagramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-600/80 to-purple-600/80 hover:from-pink-500 hover:to-purple-500 text-white font-syne text-[11px] uppercase tracking-wider font-semibold transition-all cursor-pointer rounded border border-white/20 shadow-xs"
-            >
-              <InstagramIcon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">View and comment on Instagram</span>
-              <span className="sm:hidden">Instagram</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </a>
-          )}
-
           <button
             type="button"
             onClick={onClose}
@@ -162,7 +149,7 @@ export default function LightboxModal({
                     className="inline-flex items-center gap-1.5 text-xs font-sans text-pink-300 hover:text-white underline underline-offset-4"
                   >
                     <InstagramIcon className="w-3.5 h-3.5 text-pink-400" />
-                    <span>View and comment on Instagram</span>
+                    <span>Like on Instagram</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>
                 </div>
@@ -198,36 +185,6 @@ export default function LightboxModal({
             }}
           />
         </div>
-      </div>
-
-      {/* Sleek Floating Bottom Details Bar */}
-      <div className="relative z-40 w-full px-6 py-3 border-t border-white/[0.08] bg-black/60 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-3">
-          <span className="font-artistic italic text-white text-base sm:text-lg truncate">
-            {item.title}
-          </span>
-          {(item.seriesOrProject || item.description) && (
-            <>
-              <span className="text-neutral-600 hidden sm:inline">•</span>
-              <span className="font-syne text-[11px] uppercase tracking-widest text-neutral-400 hidden sm:inline truncate max-w-md">
-                {item.seriesOrProject || item.description}
-              </span>
-            </>
-          )}
-        </div>
-
-        {item.instagramUrl && (
-          <a
-            href={item.instagramUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-sans text-pink-300 hover:text-white font-medium group/insta transition-colors"
-          >
-            <InstagramIcon className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-            <span className="underline underline-offset-4">View and comment on Instagram</span>
-            <ArrowUpRight className="w-3.5 h-3.5 group-hover/insta:translate-x-0.5 group-hover/insta:-translate-y-0.5 transition-transform" />
-          </a>
-        )}
       </div>
     </div>
   );

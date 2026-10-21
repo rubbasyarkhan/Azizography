@@ -70,6 +70,32 @@
   color: #e5e5e5;
 }
 
+.flex-carousel__instagram {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  margin-bottom: 2px;
+  font-family: var(--font-syne), -apple-system, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f472b6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 180ms ease;
+  z-index: 20;
+}
+
+.flex-carousel__instagram:hover {
+  color: #ffffff;
+  text-decoration-color: #ffffff;
+  transform: translateY(-1px);
+}
+
 .flex-carousel__count {
   display: inline-flex;
   align-items: center;

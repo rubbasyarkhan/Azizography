@@ -147,3 +147,23 @@ html.lenis, html.lenis body {
   transform: translateY(-4px);
   border-color: rgba(0, 0, 0, 0.4);
 }
+
+/* Netlify Injected Badge & Drawer Removal */
+netlify-badge,
+[id*="netlify-badge"],
+[class*="netlify-badge"],
+[class*="netlify-feedback"],
+[data-netlify-badge],
+iframe[src*="netlify"],
+div[data-netlify-deploy-id] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -99999px !important;
+  top: -99999px !important;
+  clip-path: inset(100%) !important;
+}

@@ -29,7 +29,7 @@ export interface GalleryItem {
   };
   tags?: string[];
   description?: string;
-  instagramUrl?: string; // Direct link to Instagram post / reel for "View and comment on Instagram"
+  instagramUrl?: string; // Direct link to Instagram post / reel for "Like on Instagram"
 }
 
 export interface AdminUser {

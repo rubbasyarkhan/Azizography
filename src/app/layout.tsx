@@ -10,6 +10,7 @@ import {
 } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
+import NetlifyBadgeRemover from "@/components/NetlifyBadgeRemover";
 
 const syne = Syne({
   variable: "--font-syne",
@@ -101,6 +102,7 @@ export default function RootLayout({
           }}
         />
         <SmoothScroll>{children}</SmoothScroll>
+        <NetlifyBadgeRemover />
       </body>
     </html>
   );

@@ -217,7 +217,7 @@ export default function EditItemModal({
                 className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
               />
               <p className="text-xs text-stone-500 mt-1">
-                When provided, visitors will see &quot;View and comment on Instagram ↗&quot; next to the photo description.
+                When provided, visitors will see &quot;Like on Instagram ↗&quot; next to the photo description.
               </p>
             </div>
 
