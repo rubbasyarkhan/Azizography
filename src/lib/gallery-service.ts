@@ -137,8 +137,11 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
         });
         saveLocalItems(merged);
         return merged;
+      } else {
+        // Firestore is active and explicitly empty (all gallery items wiped)
+        saveLocalItems([]);
+        return [];
       }
-      return getLocalItems();
     } catch (err) {
       console.warn("Firestore fetch failed, falling back to local storage:", err);
       return getLocalItems();
@@ -203,7 +206,9 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
             saveLocalItems(merged);
             callback(merged);
           } else {
-            callback(getLocalItems());
+            // Live Firestore collection is empty (all gallery items wiped)
+            saveLocalItems([]);
+            callback([]);
           }
         },
         (error) => {
