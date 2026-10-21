@@ -84,13 +84,18 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
             mergedMap.set(item.id, item);
           }
         }
-        const merged = Array.from(mergedMap.values()).sort(
-          (a, b) => a.orderIndex - b.orderIndex
-        );
+        const merged = Array.from(mergedMap.values()).sort((a, b) => {
+          if (a.orderIndex !== b.orderIndex) {
+            return a.orderIndex - b.orderIndex;
+          }
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
         saveLocalItems(merged);
         return merged;
       }
-      return [];
+      return getLocalItems();
     } catch (err) {
       console.warn("Firestore fetch failed, falling back to local storage:", err);
       return getLocalItems();
@@ -142,9 +147,14 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
                 mergedMap.set(item.id, item);
               }
             }
-            const merged = Array.from(mergedMap.values()).sort(
-              (a, b) => a.orderIndex - b.orderIndex
-            );
+            const merged = Array.from(mergedMap.values()).sort((a, b) => {
+              if (a.orderIndex !== b.orderIndex) {
+                return a.orderIndex - b.orderIndex;
+              }
+              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return timeB - timeA;
+            });
             saveLocalItems(merged);
             callback(merged);
           } else {
@@ -314,7 +324,10 @@ function cleanFirestoreData<T extends Record<string, any>>(obj: T): Partial<T> {
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) {
       if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-        cleaned[key] = cleanFirestoreData(value);
+        const nested = cleanFirestoreData(value);
+        if (Object.keys(nested).length > 0) {
+          cleaned[key] = nested;
+        }
       } else {
         cleaned[key] = value;
       }

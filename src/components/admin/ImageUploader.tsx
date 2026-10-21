@@ -326,11 +326,19 @@ export default function ImageUploader({
 
         const itemTitle = data.items.length > 1 ? `${baseTitle} (Part ${i + 1})` : baseTitle;
 
+        const cleanExif: Record<string, string> = {};
+        if (camera.trim()) cleanExif.camera = camera.trim();
+        if (lens.trim()) cleanExif.lens = lens.trim();
+        if (iso.trim()) cleanExif.iso = iso.trim();
+        if (aperture.trim()) cleanExif.aperture = aperture.trim();
+        if (shutter.trim()) cleanExif.shutter = shutter.trim();
+        const hasExif = Object.keys(cleanExif).length > 0;
+
         await createGalleryItem({
           title: itemTitle,
           description: cleanCaption || undefined,
           seriesOrProject: baseSeries,
-          category,
+          category: category || "people",
           imageUrl: uploadResult.imageUrl,
           storagePath: uploadResult.storagePath,
           width: uploadResult.width || webpResult.width,
@@ -342,17 +350,11 @@ export default function ImageUploader({
           isFooterTrailItem: false,
           artist: artist.trim() || undefined,
           location: location.trim() || undefined,
-          year,
+          year: year.trim() || undefined,
           aspectRatio: itemAspect,
           tags: finalTags,
           instagramUrl: instagramUrl.trim() || undefined,
-          exif: {
-            camera,
-            lens,
-            iso,
-            aperture,
-            shutter,
-          },
+          exif: hasExif ? cleanExif : undefined,
         });
       }
 
@@ -416,14 +418,22 @@ export default function ImageUploader({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setError("Please enter a title for the photograph.");
-      return;
-    }
 
-    if (!selectedFile && !externalUrl.trim()) {
-      setError("Please upload an image file or provide an image URL.");
-      return;
+    // All fields are optional. Gracefully resolve title if left blank.
+    let finalTitle = title.trim();
+    if (!finalTitle) {
+      if (seriesOrProject.trim()) {
+        finalTitle = seriesOrProject.trim();
+      } else if (description.trim()) {
+        const { cleanTitle } = parseInstagramCaption(description);
+        finalTitle = cleanTitle || description.split("\n")[0].replace(/#\w+/g, "").trim().slice(0, 48);
+      }
+      if (!finalTitle && artist.trim()) {
+        finalTitle = `${artist.trim()} Photograph`;
+      }
+      if (!finalTitle) {
+        finalTitle = "Untitled Photograph";
+      }
     }
 
     setUploading(true);
@@ -441,9 +451,34 @@ export default function ImageUploader({
         finalStoragePath = uploadResult.storagePath;
         if (uploadResult.width) itemWidth = uploadResult.width;
         if (uploadResult.height) itemHeight = uploadResult.height;
-      } else {
+      } else if (externalUrl.trim()) {
         finalImageUrl = externalUrl.trim();
         finalStoragePath = "external-url";
+      } else if (previewUrl) {
+        if (previewUrl.startsWith("data:")) {
+          try {
+            const blob = await fetch(previewUrl).then((r) => r.blob());
+            const file = new File([blob], `imported_${Date.now()}.webp`, { type: "image/webp" });
+            const uploadResult = await uploadImageFile(file);
+            finalImageUrl = uploadResult.imageUrl;
+            finalStoragePath = uploadResult.storagePath;
+            if (uploadResult.width) itemWidth = uploadResult.width;
+            if (uploadResult.height) itemHeight = uploadResult.height;
+          } catch {
+            finalImageUrl = previewUrl;
+            finalStoragePath = "preview-data";
+          }
+        } else {
+          finalImageUrl = previewUrl;
+          finalStoragePath = "preview-url";
+        }
+      } else if (instagramInputUrl.trim()) {
+        finalImageUrl = instagramInputUrl.trim();
+        finalStoragePath = "instagram-url";
+      } else {
+        setError("Please select an image or import from Instagram.");
+        setUploading(false);
+        return;
       }
 
       const tags = tagsString
@@ -451,11 +486,19 @@ export default function ImageUploader({
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const cleanExif: Record<string, string> = {};
+      if (camera.trim()) cleanExif.camera = camera.trim();
+      if (lens.trim()) cleanExif.lens = lens.trim();
+      if (iso.trim()) cleanExif.iso = iso.trim();
+      if (aperture.trim()) cleanExif.aperture = aperture.trim();
+      if (shutter.trim()) cleanExif.shutter = shutter.trim();
+      const hasExif = Object.keys(cleanExif).length > 0;
+
       await createGalleryItem({
-        title: title.trim(),
+        title: finalTitle,
         description: description.trim() || undefined,
         seriesOrProject: seriesOrProject.trim() || undefined,
-        category,
+        category: category || "people",
         imageUrl: finalImageUrl,
         storagePath: finalStoragePath,
         width: itemWidth,
@@ -470,13 +513,7 @@ export default function ImageUploader({
         year: year.trim() || undefined,
         aspectRatio,
         instagramUrl: instagramUrl.trim() || undefined,
-        exif: {
-          camera,
-          lens,
-          iso,
-          aperture,
-          shutter,
-        },
+        exif: hasExif ? cleanExif : undefined,
         tags: tags.length > 0 ? tags : undefined,
       });
 
@@ -866,22 +903,23 @@ export default function ImageUploader({
           {/* Right Column: Metadata Fields */}
           <div className="lg:col-span-7 space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Photograph Title *
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Photograph Title</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
-                required
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. After Hours Arena Tour"
+                placeholder="e.g. After Hours Arena Tour (leave blank to auto-generate)"
                 className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-4 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Series / Project / Story (Appears in Public Sidebar)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Series / Project / Story (Appears in Public Sidebar)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"
@@ -893,8 +931,9 @@ export default function ImageUploader({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Description / Editorial Notes
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Description / Caption / Editorial Notes</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <textarea
                 rows={2}
@@ -927,8 +966,9 @@ export default function ImageUploader({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Category *
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Category</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
                   value={category}
@@ -944,8 +984,9 @@ export default function ImageUploader({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Aspect Ratio
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Aspect Ratio</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <select
                   value={aspectRatio}
@@ -964,8 +1005,9 @@ export default function ImageUploader({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Artist / Subject
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Artist / Subject</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -977,8 +1019,9 @@ export default function ImageUploader({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Location
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Location</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -990,8 +1033,9 @@ export default function ImageUploader({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                  Year
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Year</span>
+                  <span className="text-xs text-stone-500 font-normal">Optional</span>
                 </label>
                 <input
                   type="text"
@@ -1004,8 +1048,9 @@ export default function ImageUploader({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-stone-800 mb-1.5">
-                Tags (comma separated)
+              <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                <span>Tags (comma separated)</span>
+                <span className="text-xs text-stone-500 font-normal">Optional</span>
               </label>
               <input
                 type="text"
