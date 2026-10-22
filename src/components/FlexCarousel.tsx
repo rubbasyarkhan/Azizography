@@ -516,7 +516,9 @@ export const FlexCarousel: React.FC<FlexCarouselProps> = ({
         dispose: () => {}
       };
       const image = new Image();
-      image.crossOrigin = 'anonymous';
+      if (!item.src.startsWith('data:')) {
+        image.crossOrigin = 'anonymous';
+      }
       image.decoding = 'async';
       image.onload = () => {
         if (!alive || !slots.includes(slot)) return;

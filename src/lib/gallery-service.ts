@@ -232,23 +232,8 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
 
         // Exclude any permanently deleted items
         const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
-        const localItems = getLocalItems();
-        const mergedMap = new Map<string, GalleryItem>();
-        for (const item of validFirestore) {
-          mergedMap.set(item.id, item);
-        }
-        for (const item of localItems) {
-          if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
-            mergedMap.set(item.id, item);
-          }
-        }
-        const rawMerged = Array.from(mergedMap.values());
-        const healed = healAndSortGalleryItems(rawMerged);
-        if (hasDuplicateOrderIndices(rawMerged)) {
-          syncGalleryItemsOrder(healed);
-        } else {
-          saveLocalItems(healed);
-        }
+        const healed = healAndSortGalleryItems(validFirestore);
+        saveLocalItems(healed);
         return healed;
       } else {
         // Firestore is active and explicitly empty (all gallery items wiped)
@@ -298,23 +283,8 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
 
             // Exclude any permanently deleted items
             const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
-            const localItems = getLocalItems();
-            const mergedMap = new Map<string, GalleryItem>();
-            for (const item of validFirestore) {
-              mergedMap.set(item.id, item);
-            }
-            for (const item of localItems) {
-              if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
-                mergedMap.set(item.id, item);
-              }
-            }
-            const rawMerged = Array.from(mergedMap.values());
-            const healed = healAndSortGalleryItems(rawMerged);
-            if (hasDuplicateOrderIndices(rawMerged)) {
-              syncGalleryItemsOrder(healed);
-            } else {
-              saveLocalItems(healed);
-            }
+            const healed = healAndSortGalleryItems(validFirestore);
+            saveLocalItems(healed);
             callback(healed);
           } else {
             // Live Firestore collection is empty (all gallery items wiped)

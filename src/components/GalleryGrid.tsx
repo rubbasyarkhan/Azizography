@@ -62,7 +62,17 @@ const SortableImageCard = React.memo(function SortableImageCard({
   onDeleteItem?: (id: string) => void;
   onToggleIris?: (item: GalleryItem) => void;
 }) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const isDataUrl = Boolean(item.imageUrl && item.imageUrl.startsWith("data:"));
+  const [imageLoaded, setImageLoaded] = useState(isDataUrl);
+  const imgRef = React.useRef<HTMLImageElement>(null);
+
+  React.useEffect(() => {
+    if (imgRef.current && (imgRef.current.complete || isDataUrl)) {
+      setImageLoaded(true);
+    }
+  }, [item.imageUrl, isDataUrl]);
+
+  const responsiveSrcSet = getResponsiveSrcSet(item.imageUrl, [380, 680, 950]);
 
   // Compute exact aspect ratio string to prevent any Cumulative Layout Shift (CLS)
   const aspectRatioStyle = React.useMemo(() => {
@@ -121,16 +131,18 @@ const SortableImageCard = React.memo(function SortableImageCard({
       >
         {/* Full Height & Width Raw Image (Optimized, compressed, and lazy loaded) */}
         <img
+          ref={imgRef}
           src={getOptimizedImageUrl(item.imageUrl, 750, 75)}
-          srcSet={getResponsiveSrcSet(item.imageUrl, [380, 680, 950])}
+          {...(responsiveSrcSet ? { srcSet: responsiveSrcSet } : {})}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           alt={item.title}
           loading={isLcpCandidate ? "eager" : "lazy"}
           fetchPriority={isLcpCandidate ? "high" : undefined}
           decoding="async"
           onLoad={() => setImageLoaded(true)}
-          className={`w-full h-auto block object-cover transition-all duration-500 ease-out group-hover:scale-[1.015] ${
-            imageLoaded ? "opacity-100" : "opacity-0"
+          onError={() => setImageLoaded(true)}
+          className={`w-full h-auto block object-cover transition-all duration-300 ease-out group-hover:scale-[1.015] ${
+            imageLoaded || isDataUrl ? "opacity-100" : "opacity-0"
           }`}
         />
 
