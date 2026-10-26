@@ -1,52 +1,166 @@
 import { db, isFirebaseConfigured } from "./firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { GalleryItem } from "@/types/gallery";
+import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { GalleryItem, CategoryDefinition } from "@/types/gallery";
 import { normalizeCategory, getCategoryDisplayLabel } from "./filter-utils";
 
 export interface CategoryOption {
   key: string;
   label: string;
+  subcategories?: string[];
+  description?: string;
+  count?: number;
 }
 
-export const BUILT_IN_CATEGORIES: CategoryOption[] = [
-  { key: "people", label: "Portraits & People" },
-  { key: "concerts", label: "Live & Concerts" },
-  { key: "singers", label: "Vocalists & Singers" },
-  { key: "weddings", label: "Weddings & Ceremonies" },
-  { key: "events", label: "Festivals & Events" },
+const CATEGORIES_STORAGE_KEY = "azizography_categories_v3";
+
+// Initial seed matching user portfolio taxonomy
+export const SEED_CATEGORIES: CategoryDefinition[] = [
+  {
+    id: "cat-people",
+    name: "People",
+    slug: "people",
+    subcategories: ["@boljanimusic"],
+    description: "Editorial portraiture, intimate monographs, and authentic emotion.",
+    orderIndex: 0,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "cat-singers",
+    name: "Singers",
+    slug: "singers",
+    subcategories: ["Talha Anjum (Mr MOST STREAM)"],
+    description: "Recording artists, arena performances, and raw backstage captures.",
+    orderIndex: 1,
+    createdAt: new Date().toISOString(),
+  },
 ];
 
-const CUSTOM_CATEGORIES_KEY = "azizography_custom_categories_v2";
+let inMemoryCategories: CategoryDefinition[] | null = null;
 
-export function getCustomCategories(): CategoryOption[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(CUSTOM_CATEGORIES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter((c) => c && typeof c.key === "string" && typeof c.label === "string");
-    }
-  } catch (e) {
-    console.warn("Could not read custom categories from localStorage:", e);
+/**
+ * Heals category list with any real categories present on active gallery items.
+ * Removes empty obsolete placeholder categories (like dummy wedding/artist with 0 items).
+ */
+export function healCategoriesWithItems(
+  existingCategories: CategoryDefinition[],
+  items?: GalleryItem[]
+): CategoryDefinition[] {
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return existingCategories;
   }
-  return [];
+
+  const map = new Map<string, CategoryDefinition>();
+
+  // 1. Index existing categories
+  for (const c of existingCategories) {
+    const slug = c.slug || normalizeCategory(c.name);
+    map.set(slug, {
+      ...c,
+      slug,
+      name: c.name || getCategoryDisplayLabel(slug),
+      subcategories: [...(c.subcategories || [])],
+    });
+  }
+
+  // 2. Discover categories & subcategories from items
+  for (const item of items) {
+    if (item.isVisible === false || !item.imageUrl) continue;
+    const rawCat = (item.category || "people").trim();
+    const slug = normalizeCategory(rawCat);
+    const subName = (item.subcategory || item.seriesOrProject || "").trim();
+
+    if (!map.has(slug)) {
+      map.set(slug, {
+        id: `cat-${slug}`,
+        name: getCategoryDisplayLabel(rawCat),
+        slug,
+        subcategories: subName ? [subName] : [],
+        description:
+          slug === "people"
+            ? "Editorial portraiture, intimate monographs, and authentic emotion."
+            : slug === "singers"
+            ? "Recording artists, arena performances, and raw backstage captures."
+            : `Curated ${rawCat} monographs and artistic photography.`,
+        orderIndex: map.size,
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      const existing = map.get(slug)!;
+      if (subName && !existing.subcategories.some((s) => s.toLowerCase() === subName.toLowerCase())) {
+        existing.subcategories.push(subName);
+      }
+    }
+  }
+
+  // 3. Count items in each category
+  const list = Array.from(map.values()).map((c) => {
+    const count = items.filter((i) => {
+      if (i.isVisible === false || !i.imageUrl) return false;
+      const norm = normalizeCategory(i.category || "people");
+      return norm === c.slug || norm === normalizeCategory(c.name);
+    }).length;
+    return { ...c, count };
+  });
+
+  // 4. If we have categories with items, filter out obsolete categories with 0 items
+  const hasPopulated = list.some((c) => (c.count || 0) > 0);
+  let result = list;
+  if (hasPopulated) {
+    result = list.filter((c) => (c.count || 0) > 0);
+  }
+
+  return result.map(({ count, ...rest }) => rest);
 }
 
-export function saveCustomCategories(categories: CategoryOption[]): void {
-  if (typeof window === "undefined") return;
+export function getCategories(items?: GalleryItem[]): CategoryDefinition[] {
+  if (inMemoryCategories && inMemoryCategories.length > 0) {
+    if (items && Array.isArray(items) && items.length > 0) {
+      const healed = healCategoriesWithItems(inMemoryCategories, items);
+      inMemoryCategories = healed;
+      return healed;
+    }
+    return inMemoryCategories;
+  }
+
+  if (typeof window === "undefined") {
+    return items && items.length > 0 ? healCategoriesWithItems(SEED_CATEGORIES, items) : SEED_CATEGORIES;
+  }
+
   try {
-    localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(categories));
-    window.dispatchEvent(
-      new CustomEvent("azizography_categories_update", { detail: categories })
-    );
+    const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const healed = items && items.length > 0 ? healCategoriesWithItems(parsed, items) : parsed;
+        inMemoryCategories = healed;
+        return healed;
+      }
+    }
   } catch (e) {
-    console.warn("Could not save custom categories to localStorage:", e);
+    console.warn("Could not read categories from localStorage:", e);
+  }
+
+  const initial = items && items.length > 0 ? healCategoriesWithItems(SEED_CATEGORIES, items) : SEED_CATEGORIES;
+  inMemoryCategories = initial;
+  return initial;
+}
+
+export function saveCategories(categories: CategoryDefinition[]): void {
+  inMemoryCategories = categories;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
+      window.dispatchEvent(
+        new CustomEvent("azizography_categories_update", { detail: categories })
+      );
+    } catch (e) {
+      console.warn("Could not save categories to localStorage:", e);
+    }
   }
 
   if (isFirebaseConfigured && db) {
     try {
-      const docRef = doc(db, "site_metadata", "categories");
+      const docRef = doc(db, "site_metadata", "categories_v3");
       setDoc(docRef, { list: categories, updatedAt: new Date().toISOString() }, { merge: true }).catch(
         (err) => console.warn("Firestore categories sync notice:", err)
       );
@@ -56,64 +170,143 @@ export function saveCustomCategories(categories: CategoryOption[]): void {
   }
 }
 
-export async function addCustomCategory(label: string): Promise<CategoryOption> {
-  const trimmed = label.trim();
+export async function addCategory(
+  name: string,
+  subcategories: string[] = [],
+  description?: string,
+  coverImageUrl?: string
+): Promise<CategoryDefinition> {
+  const trimmed = name.trim();
   if (!trimmed) {
     throw new Error("Category name cannot be empty");
   }
 
-  const norm = normalizeCategory(trimmed);
-  const key = norm || trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-  const existing = getCustomCategories();
-  const alreadyBuiltIn = BUILT_IN_CATEGORIES.some(
-    (b) => b.key === key || b.label.toLowerCase() === trimmed.toLowerCase()
+  const slug = normalizeCategory(trimmed) || trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const current = getCategories();
+  const existing = current.find(
+    (c) => c.slug === slug || c.name.toLowerCase() === trimmed.toLowerCase()
   );
 
-  const foundExisting = existing.find(
-    (c) => c.key === key || c.label.toLowerCase() === trimmed.toLowerCase()
-  );
-
-  if (foundExisting) {
-    return foundExisting;
+  if (existing) {
+    // If new subcategories provided, merge them
+    if (subcategories.length > 0) {
+      const mergedSubs = Array.from(new Set([...(existing.subcategories || []), ...subcategories]));
+      const updated = current.map((c) =>
+        c.id === existing.id ? { ...c, subcategories: mergedSubs, description: description?.trim() || c.description } : c
+      );
+      saveCategories(updated);
+      return { ...existing, subcategories: mergedSubs };
+    }
+    return existing;
   }
-  if (alreadyBuiltIn) {
-    return BUILT_IN_CATEGORIES.find((b) => b.key === key)!;
-  }
 
-  const newOption: CategoryOption = {
-    key,
-    label: trimmed,
+  const newCat: CategoryDefinition = {
+    id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    name: trimmed,
+    slug,
+    subcategories: subcategories.map((s) => s.trim()).filter(Boolean),
+    description: description?.trim() || `Curated ${trimmed} monographs and exhibition series.`,
+    coverImageUrl: coverImageUrl?.trim() || "",
+    orderIndex: current.length,
+    createdAt: new Date().toISOString(),
   };
 
-  const updated = [...existing, newOption];
-  saveCustomCategories(updated);
-  return newOption;
+  const updated = [...current, newCat];
+  saveCategories(updated);
+  return newCat;
 }
 
+export async function updateCategory(
+  id: string,
+  updates: Partial<CategoryDefinition>
+): Promise<void> {
+  const current = getCategories();
+  const updated = current.map((c) => {
+    if (c.id === id || c.slug === id) {
+      const next = { ...c, ...updates };
+      if (updates.name && !updates.slug) {
+        next.slug = normalizeCategory(updates.name);
+      }
+      return next;
+    }
+    return c;
+  });
+  saveCategories(updated);
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const current = getCategories();
+  const updated = current.filter((c) => c.id !== id && c.slug !== id);
+  saveCategories(updated);
+}
+
+export async function addSubcategory(categorySlugOrId: string, subcategoryName: string): Promise<void> {
+  const trimmedSub = subcategoryName.trim();
+  if (!trimmedSub) return;
+  const current = getCategories();
+  const updated = current.map((c) => {
+    if (c.id === categorySlugOrId || c.slug === categorySlugOrId || c.name.toLowerCase() === categorySlugOrId.toLowerCase()) {
+      const existing = c.subcategories || [];
+      if (!existing.some((s) => s.toLowerCase() === trimmedSub.toLowerCase())) {
+        return { ...c, subcategories: [...existing, trimmedSub] };
+      }
+    }
+    return c;
+  });
+  saveCategories(updated);
+}
+
+export async function deleteSubcategory(categorySlugOrId: string, subcategoryName: string): Promise<void> {
+  const trimmedSub = subcategoryName.trim().toLowerCase();
+  const current = getCategories();
+  const updated = current.map((c) => {
+    if (c.id === categorySlugOrId || c.slug === categorySlugOrId || c.name.toLowerCase() === categorySlugOrId.toLowerCase()) {
+      return {
+        ...c,
+        subcategories: (c.subcategories || []).filter((s) => s.trim().toLowerCase() !== trimmedSub),
+      };
+    }
+    return c;
+  });
+  saveCategories(updated);
+}
+
+export async function reorderCategories(newCategories: CategoryDefinition[]): Promise<void> {
+  const indexed = newCategories.map((c, idx) => ({ ...c, orderIndex: idx }));
+  saveCategories(indexed);
+}
+
+// Backward-compatible adapter for existing components
 export function getAllCategories(items?: GalleryItem[]): CategoryOption[] {
+  const categories = getCategories(items);
   const map = new Map<string, CategoryOption>();
 
-  // 1. Built-in
-  for (const b of BUILT_IN_CATEGORIES) {
-    map.set(b.key, b);
+  for (const c of categories) {
+    map.set(c.slug, {
+      key: c.slug,
+      label: c.name,
+      subcategories: c.subcategories,
+      description: c.description,
+    });
   }
 
-  // 2. Custom stored
-  for (const c of getCustomCategories()) {
-    if (!map.has(c.key)) {
-      map.set(c.key, c);
-    }
-  }
-
-  // 3. Dynamic from items
+  // Also collect any dynamic categories assigned on items
   if (items && Array.isArray(items)) {
     for (const item of items) {
       if (item.category) {
         const norm = normalizeCategory(item.category);
-        const label = getCategoryDisplayLabel(item.category);
+        const subName = (item.subcategory || item.seriesOrProject || "").trim();
         if (!map.has(norm)) {
-          map.set(norm, { key: norm, label });
+          map.set(norm, {
+            key: norm,
+            label: getCategoryDisplayLabel(item.category),
+            subcategories: subName ? [subName] : [],
+          });
+        } else if (subName) {
+          const opt = map.get(norm)!;
+          if (opt.subcategories && !opt.subcategories.some((s) => s.toLowerCase() === subName.toLowerCase())) {
+            opt.subcategories.push(subName);
+          }
         }
       }
     }
@@ -122,41 +315,92 @@ export function getAllCategories(items?: GalleryItem[]): CategoryOption[] {
   return Array.from(map.values());
 }
 
+export async function addCustomCategory(label: string): Promise<CategoryOption> {
+  const cat = await addCategory(label);
+  return { key: cat.slug, label: cat.name, subcategories: cat.subcategories, description: cat.description };
+}
+
+// Shared subscriber set for categories
+const categoryCallbacks = new Set<(cats: CategoryDefinition[]) => void>();
+let globalCategoryFirestoreUnsub: (() => void) | null = null;
+let categoryTeardownTimer: ReturnType<typeof setTimeout> | null = null;
+
+function broadcastCategories(cats: CategoryDefinition[]) {
+  categoryCallbacks.forEach((cb) => {
+    try {
+      cb(cats);
+    } catch {
+      // safe
+    }
+  });
+}
+
 export function subscribeToCategories(
-  callback: (cats: CategoryOption[]) => void,
-  items?: GalleryItem[]
+  callback: (cats: CategoryDefinition[]) => void
 ): () => void {
   if (typeof window === "undefined") {
-    callback(getAllCategories(items));
+    callback(getCategories());
     return () => {};
   }
 
+  if (categoryTeardownTimer) {
+    clearTimeout(categoryTeardownTimer);
+    categoryTeardownTimer = null;
+  }
+
+  categoryCallbacks.add(callback);
+
   const handler = () => {
-    callback(getAllCategories(items));
+    broadcastCategories(getCategories());
   };
 
-  window.addEventListener("azizography_categories_update", handler);
-  callback(getAllCategories(items));
+  if (categoryCallbacks.size === 1) {
+    window.addEventListener("azizography_categories_update", handler);
+  }
 
-  // Sync from Firestore once if available
-  if (isFirebaseConfigured && db) {
-    getDoc(doc(db, "site_metadata", "categories"))
-      .then((snap) => {
-        if (snap.exists() && snap.data()?.list) {
-          const remoteList: CategoryOption[] = snap.data().list;
-          const localList = getCustomCategories();
-          const merged = new Map<string, CategoryOption>();
-          for (const c of localList) merged.set(c.key, c);
-          for (const c of remoteList) merged.set(c.key, c);
-          const finalCustom = Array.from(merged.values());
-          localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(finalCustom));
-          callback(getAllCategories(items));
+  callback(getCategories());
+
+  if (!globalCategoryFirestoreUnsub && isFirebaseConfigured && db) {
+    try {
+      const docRef = doc(db, "site_metadata", "categories_v3");
+      globalCategoryFirestoreUnsub = onSnapshot(
+        docRef,
+        (snap) => {
+          if (snap.exists() && snap.data()?.list) {
+            const remoteList: CategoryDefinition[] = snap.data().list;
+            inMemoryCategories = remoteList;
+            try {
+              localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(remoteList));
+            } catch {}
+            broadcastCategories(remoteList);
+          }
+        },
+        (err) => {
+          console.warn("Firestore categories notice (using local storage fallback):", err?.message || err);
+          broadcastCategories(getCategories());
         }
-      })
-      .catch((err) => console.warn("Firestore categories fetch notice:", err));
+      );
+    } catch {
+      // safe fallback
+    }
   }
 
   return () => {
-    window.removeEventListener("azizography_categories_update", handler);
+    categoryCallbacks.delete(callback);
+    if (categoryCallbacks.size === 0) {
+      categoryTeardownTimer = setTimeout(() => {
+        if (categoryCallbacks.size === 0) {
+          if (globalCategoryFirestoreUnsub) {
+            try {
+              globalCategoryFirestoreUnsub();
+            } catch (unsubErr) {
+              console.debug("Firestore category unsubscribe suppressed:", unsubErr);
+            }
+            globalCategoryFirestoreUnsub = null;
+          }
+          window.removeEventListener("azizography_categories_update", handler);
+        }
+      }, 2500);
+    }
   };
 }

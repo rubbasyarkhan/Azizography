@@ -91,6 +91,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${syne.variable} ${spaceGrotesk.variable} ${cormorant.variable} ${cinzel.variable} ${italiana.variable} ${playfair.variable} ${inter.variable} bg-[#FAF9F6] text-[#0A0A0A] antialiased selection:bg-[#0A0A0A] selection:text-[#FAF9F6]`}
     >
       <body className="min-h-screen bg-[#FAF9F6] text-[#0A0A0A] font-sans overflow-x-hidden">

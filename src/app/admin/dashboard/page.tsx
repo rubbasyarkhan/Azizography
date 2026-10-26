@@ -16,6 +16,7 @@ import ImageUploader from "@/components/admin/ImageUploader";
 import EditItemModal from "@/components/admin/EditItemModal";
 import IrisManagerModal from "@/components/admin/IrisManagerModal";
 import AboutEditorModal from "@/components/admin/AboutEditorModal";
+import CategoryManagerModal from "@/components/admin/CategoryManagerModal";
 import {
   Plus,
   ExternalLink,
@@ -23,6 +24,7 @@ import {
   Sparkles,
   BookOpen,
   User,
+  Layers,
 } from "lucide-react";
 
 function AdminDashboardContent() {
@@ -33,6 +35,7 @@ function AdminDashboardContent() {
   const [showUploader, setShowUploader] = useState(false);
   const [showIrisManager, setShowIrisManager] = useState(false);
   const [showAboutEditor, setShowAboutEditor] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [importData, setImportData] = useState<{
@@ -91,7 +94,13 @@ function AdminDashboardContent() {
     const unsubscribe = subscribeToGalleryItems((data) => {
       setItems(data);
     });
-    return () => unsubscribe();
+    return () => {
+      try {
+        unsubscribe();
+      } catch (e) {
+        console.warn("Dashboard items unsubscribe error:", e);
+      }
+    };
   }, []);
 
   const showNotice = useCallback((msg: string) => {
@@ -243,6 +252,15 @@ function AdminDashboardContent() {
 
             <button
               type="button"
+              onClick={() => setShowCategoryManager(true)}
+              className="px-4 py-2.5 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] border border-[#DDD6CA] hover:border-stone-400 text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+            >
+              <Layers className="w-4 h-4 text-stone-700" />
+              <span>Categories & Subcategories</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowAboutEditor(true)}
               className="px-4 py-2.5 bg-[#FAF7F2] hover:bg-[#EAE4D9] text-[#1C1917] border border-[#DDD6CA] hover:border-stone-400 text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
             >
@@ -319,6 +337,14 @@ function AdminDashboardContent() {
         onClose={() => setShowAboutEditor(false)}
         onSaved={(msg) => showNotice(msg)}
       />
+
+      {/* Category & Subcategory Studio Modal */}
+      {showCategoryManager && (
+        <CategoryManagerModal
+          items={items}
+          onClose={() => setShowCategoryManager(false)}
+        />
+      )}
 
       {/* Edit Item Modal */}
       {editingItem && (

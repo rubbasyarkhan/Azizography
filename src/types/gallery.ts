@@ -1,9 +1,21 @@
-export type GalleryCategory = 'people' | 'events' | 'concerts' | 'singers' | 'weddings' | string;
+export type GalleryCategory = string;
+
+export interface CategoryDefinition {
+  id: string;
+  name: string; // e.g. "Wedding", "Artist"
+  slug: string; // normalized key e.g. "wedding", "artist"
+  subcategories: string[]; // e.g. ["Mayun", "Barat", "Walima"] or ["Talha Anjum", "Bohemia", "Eminem"]
+  description?: string;
+  coverImageUrl?: string;
+  orderIndex?: number;
+  createdAt?: string;
+}
 
 export interface GalleryItem {
   id: string;
   title: string;
   category: GalleryCategory;
+  subcategory?: string; // e.g. "Mayun", "Barat", "Walima" or "Talha Anjum", "Bohemia", "Eminem"
   seriesOrProject?: string; // e.g. "Netflix x The Four Seasons", "Taika Waititi for WIRED", "The Weeknd // After Hours"
   imageUrl: string;
   storagePath: string;

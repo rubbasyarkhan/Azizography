@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { GalleryItem } from "@/types/gallery";
@@ -12,6 +12,7 @@ import {
   subscribeToAboutContent,
 } from "@/lib/about-service";
 import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -30,8 +31,16 @@ function AboutContent() {
       setAbout(data);
     });
     return () => {
-      unsubGallery();
-      unsubAbout();
+      try {
+        unsubGallery();
+      } catch {
+        // Safe unsubscription cleanup
+      }
+      try {
+        unsubAbout();
+      } catch {
+        // Safe unsubscription cleanup
+      }
     };
   }, []);
 
@@ -100,13 +109,15 @@ function AboutContent() {
         )}
       </div>
 
-      <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* Editorial Left Sidebar */}
-        <Sidebar items={items} />
+      {/* Top Navigation Bar: FULL ARCHIVE, ABOUT, CONTACT */}
+      <Navbar items={items} />
+
+      <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+        <Sidebar items={items} brandName="Azizography." />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="w-full px-6 sm:px-12 lg:px-20 py-12 lg:py-20 max-w-5xl">
+        <div className="flex-1 w-full min-w-0">
+          <div className="w-full max-w-5xl px-6 sm:px-12 lg:px-16 py-12 lg:py-20">
             {/* Top Bio Section with Natural Aspect Ratio Portrait */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14 items-start pb-16 border-b border-[#DDD6CA]">
               {/* Photographer Portrait */}
@@ -229,7 +240,7 @@ function AboutContent() {
         </div>
       </div>
 
-      {/* Full-Width Footer */}
+      {/* 100% Full-Width Editorial Footer */}
       <Footer />
     </main>
   );
@@ -238,7 +249,9 @@ function AboutContent() {
 export default function AboutPage() {
   return (
     <AuthProvider>
-      <AboutContent />
+      <Suspense fallback={null}>
+        <AboutContent />
+      </Suspense>
     </AuthProvider>
   );
 }

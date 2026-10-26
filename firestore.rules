@@ -13,7 +13,7 @@ rules_version = '2';
 //   - orderIndex: number (required, >= 0) - Sorting sequence index on gallery and admin board
 //   - imageUrl: string (required, 1-1,000,000 chars) - Image source URL (HTTPS or data URL)
 //   - id: string (optional, 1-100 chars, immutable on update) - Document ID
-//   - category: string (optional, 0-100 chars) - Category ('people', 'concerts', 'events', etc.)
+//   - category: string (optional, 0-100 chars) - Category ('wedding', 'artist', 'fashion', etc.)
 //   - seriesOrProject: string (optional, 0-200 chars) - Series or client project title
 //   - storagePath: string (optional, 0-500 chars) - Cloud Storage asset path
 //   - isFeatured: bool (optional) - Highlight flag for portfolio exhibition
@@ -32,6 +32,32 @@ rules_version = '2';
 //   - instagramUrl: string (optional, 0-1000 chars) - External Instagram post or reel link
 //   - exif: map (optional, keys: camera, lens, iso, aperture, shutter) - Photography metadata
 //   - tags: list (optional, max 50 items) - Categorization tags
+//
+// Collection: site_metadata
+// Document ID: string (e.g. 'categories_v3', 'settings')
+// Fields (categories_v3):
+//   - list: list (optional, max 200 items) - Array of category definition maps (id, name, slug, subcategories, etc.)
+//   - updatedAt: string (optional, 0-50 chars) - ISO timestamp of category structure synchronization
+//   - id: string (optional, 0-100 chars, immutable on update) - Document identifier
+//   - version: string (optional, 0-50 chars) - Schema version tag
+// Fields (general metadata documents):
+//   - Up to 50 allowed properties with bounded string lengths and updatedAt timestamp
+//
+// Collection: site_content
+// Document ID: string (e.g. 'about', 'bio')
+// Fields (about):
+//   - portraitImageUrl: string (optional, 0-1,000,000 chars) - Photographer portrait image source (HTTPS or data URL)
+//   - locationBadge: string (optional, 0-500 chars) - Location & studio badge subtitle
+//   - headline: string (optional, 0-1000 chars) - Hero biography statement headline
+//   - bioParagraph1: string (optional, 0-10,000 chars) - Primary artist biography narrative
+//   - bioParagraph2: string (optional, 0-10,000 chars) - Artistic philosophy and approach narrative
+//   - clients: list (optional, max 150 items) - Array of client & publication items (id, name, category, imageUrl)
+//   - selectedClients: list (optional, max 150 items) - Array of featured client names
+//   - exhibitions: list (optional, max 150 items) - Array of exhibition objects (year, title, venue, type)
+//   - updatedAt: string (optional, 0-50 chars) - ISO timestamp of content update
+//   - id: string (optional, 0-100 chars, immutable on update) - Document identifier
+// Fields (general content documents):
+//   - Up to 50 allowed properties with bounded string lengths and updatedAt timestamp
 //
 // ===============================================================
 
@@ -161,24 +187,104 @@ service cloud.firestore {
         isValidTags(data);
     }
 
+    // Validate categories metadata document payload
+    function isValidCategoriesMetadata(data) {
+      return hasOnlyAllowedFields(['list', 'updatedAt', 'id', 'version']) &&
+        (!('list' in data) || (data.list is list && data.list.size() <= 200)) &&
+        isValidOptionalString('updatedAt', 0, 50) &&
+        isValidOptionalString('id', 0, 100) &&
+        isValidOptionalString('version', 0, 50);
+    }
+
+    // General metadata validator for potential future site configuration documents
+    function isValidGeneralMetadata(data) {
+      return data.keys().size() <= 50 &&
+        isValidOptionalString('updatedAt', 0, 50) &&
+        isValidOptionalString('id', 0, 100);
+    }
+
+    // Domain validator for site_metadata collection
+    function isValidSiteMetadata(data, docId) {
+      return (docId.matches('^categories.*') && isValidCategoriesMetadata(data)) ||
+             (!docId.matches('^categories.*') && isValidGeneralMetadata(data));
+    }
+
+    // Validate about content document payload (photographer portrait, bio, client publications, exhibitions)
+    function isValidAboutContent(data) {
+      return hasOnlyAllowedFields([
+          'id', 'portraitImageUrl', 'locationBadge', 'headline',
+          'bioParagraph1', 'bioParagraph2', 'clients', 'selectedClients',
+          'exhibitions', 'updatedAt'
+        ]) &&
+        isValidOptionalString('id', 0, 100) &&
+        isValidOptionalString('portraitImageUrl', 0, 1000000) &&
+        isValidOptionalString('locationBadge', 0, 500) &&
+        isValidOptionalString('headline', 0, 1000) &&
+        isValidOptionalString('bioParagraph1', 0, 10000) &&
+        isValidOptionalString('bioParagraph2', 0, 10000) &&
+        (!('clients' in data) || (data.clients is list && data.clients.size() <= 150)) &&
+        (!('selectedClients' in data) || (data.selectedClients is list && data.selectedClients.size() <= 150)) &&
+        (!('exhibitions' in data) || (data.exhibitions is list && data.exhibitions.size() <= 150)) &&
+        isValidOptionalString('updatedAt', 0, 50);
+    }
+
+    // General content validator for potential future editorial content documents
+    function isValidGeneralContent(data) {
+      return data.keys().size() <= 50 &&
+        isValidOptionalString('updatedAt', 0, 50) &&
+        isValidOptionalString('id', 0, 100);
+    }
+
+    // Domain validator for site_content collection
+    function isValidSiteContent(data, docId) {
+      return (docId == 'about' && isValidAboutContent(data)) ||
+             (docId != 'about' && isValidGeneralContent(data));
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
 
-    // Gallery Photographs Collection
+    // 1. Gallery Photographs Collection
     match /gallery_items/{itemId} {
-      // 1. Public visitors can view photographs
+      // Public visitors can view photographs
       allow read: if true;
 
-      // 2. Only authenticated admin users can create gallery items
+      // Only authenticated admin users can create gallery items
       allow create: if isAdmin() && isValidGalleryItem(request.resource.data);
 
-      // 2. Only authenticated admin users can update gallery items
+      // Only authenticated admin users can update gallery items
       allow update: if isAdmin() &&
                        isValidGalleryItem(request.resource.data) &&
                        areImmutableFieldsUnchanged(['id', 'createdAt']);
 
-      // 2. Only authenticated admin users can delete gallery items
+      // Only authenticated admin users can delete gallery items
+      allow delete: if isAdmin();
+    }
+
+    // 2. Site Metadata Collection (Categories, Taxonomy, and Settings)
+    match /site_metadata/{docId} {
+      // Allow public read (anyone can read categories and site metadata)
+      allow read: if true;
+
+      // Allow write only if isAdmin()
+      allow create: if isAdmin() && isValidSiteMetadata(request.resource.data, docId);
+      allow update: if isAdmin() &&
+                       isValidSiteMetadata(request.resource.data, docId) &&
+                       areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    // 3. Site Content Collection (About page content, client publications, and bio)
+    match /site_content/{docId} {
+      // Allow public read (anyone can read about page content, client publications, and bio)
+      allow read: if true;
+
+      // Allow write only if isAdmin()
+      allow create: if isAdmin() && isValidSiteContent(request.resource.data, docId);
+      allow update: if isAdmin() &&
+                       isValidSiteContent(request.resource.data, docId) &&
+                       areImmutableFieldsUnchanged(['id']);
       allow delete: if isAdmin();
     }
 

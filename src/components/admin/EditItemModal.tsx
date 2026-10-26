@@ -1,9 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { GalleryItem, GalleryCategory } from "@/types/gallery";
-import { getAllCategories, addCustomCategory, CategoryOption } from "@/lib/category-service";
+import {
+  getAllCategories,
+  addCustomCategory,
+  getCategories,
+  addSubcategory,
+  subscribeToCategories,
+  CategoryOption,
+} from "@/lib/category-service";
 import {
   X,
   Trash2,
@@ -27,11 +34,37 @@ export default function EditItemModal({
   const [description, setDescription] = useState(item.description || "");
   const [seriesOrProject, setSeriesOrProject] = useState(item.seriesOrProject || "");
   const [category, setCategory] = useState<GalleryCategory>(item.category);
+  const [subcategory, setSubcategory] = useState(item.subcategory || item.seriesOrProject || "");
   const [availableCategories, setAvailableCategories] = useState<CategoryOption[]>(() =>
     getAllCategories()
   );
+
+  useEffect(() => {
+    const unsub = subscribeToCategories(() => {
+      const cats = getAllCategories();
+      setAvailableCategories(cats);
+    });
+    return () => {
+      try {
+        unsub();
+      } catch (e) {
+        console.warn("EditItemModal categories unsubscribe error:", e);
+      }
+    };
+  }, []);
   const [isAddingNewCat, setIsAddingNewCat] = useState(false);
   const [newCatInput, setNewCatInput] = useState("");
+  const [isAddingNewSub, setIsAddingNewSub] = useState(false);
+  const [newSubInput, setNewSubInput] = useState("");
+
+  const currentCategoryDef = useMemo(() => {
+    const all = getCategories();
+    return all.find((c) => c.slug === category || c.name.toLowerCase() === category.toLowerCase());
+  }, [category, availableCategories]);
+
+  const currentSubcategories = useMemo(() => {
+    return currentCategoryDef?.subcategories || [];
+  }, [currentCategoryDef]);
   const [artist, setArtist] = useState(item.artist || "");
   const [location, setLocation] = useState(item.location || "");
   const [year, setYear] = useState(item.year || "");
@@ -94,7 +127,8 @@ export default function EditItemModal({
       title: cleanTitle,
       description: description.trim() || undefined,
       seriesOrProject: seriesOrProject.trim() || undefined,
-      category: category || "people",
+      category: category || "wedding",
+      subcategory: subcategory.trim() || undefined,
       artist: artist.trim() || undefined,
       location: location.trim() || undefined,
       year: year.trim() || undefined,
@@ -233,7 +267,7 @@ export default function EditItemModal({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
                 <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
                   <span>Category</span>
@@ -290,6 +324,76 @@ export default function EditItemModal({
                     >
                       Cancel
                     </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-800 mb-1.5 flex items-center justify-between">
+                  <span>Subcategory</span>
+                  <span className="text-xs text-stone-500 font-normal">e.g. Mayun / Barat or Artist</span>
+                </label>
+                {currentSubcategories.length > 0 && !isAddingNewSub ? (
+                  <div className="space-y-1.5">
+                    <select
+                      value={subcategory}
+                      onChange={(e) => {
+                        if (e.target.value === "__new_sub__") {
+                          setIsAddingNewSub(true);
+                        } else {
+                          setSubcategory(e.target.value);
+                        }
+                      }}
+                      className="w-full bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] text-sm sm:text-base focus:outline-none focus:border-[#1C1917] rounded-lg transition-colors cursor-pointer"
+                    >
+                      <option value="">-- Select Subcategory (Optional) --</option>
+                      {currentSubcategories.map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                      <option value="__new_sub__">+ Add New Subcategory...</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={isAddingNewSub ? newSubInput : subcategory}
+                      onChange={(e) => {
+                        if (isAddingNewSub) {
+                          setNewSubInput(e.target.value);
+                        } else {
+                          setSubcategory(e.target.value);
+                        }
+                      }}
+                      placeholder="e.g. Mayun, Barat, or Talha Anjum"
+                      className="flex-1 bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
+                    />
+                    {isAddingNewSub && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!newSubInput.trim()) return;
+                            await addSubcategory(category, newSubInput.trim());
+                            setSubcategory(newSubInput.trim());
+                            setIsAddingNewSub(false);
+                            setNewSubInput("");
+                          }}
+                          className="px-3 py-2.5 bg-[#1C1917] text-white text-xs font-semibold rounded-lg hover:bg-stone-800"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingNewSub(false)}
+                          className="px-2 py-2.5 text-stone-500 hover:text-stone-800 text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

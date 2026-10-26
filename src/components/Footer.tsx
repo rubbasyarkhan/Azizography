@@ -66,7 +66,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="relative w-full min-h-screen bg-[#0A0A0A] text-[#FAF9F6] flex flex-col justify-between pt-16 sm:pt-20 pb-10 sm:pb-14 px-6 sm:px-12 md:px-16 lg:px-24 selection:bg-white selection:text-black border-t border-neutral-900 overflow-hidden">
+    <footer id="footer" className="relative w-full min-h-screen bg-[#0A0A0A] text-[#FAF9F6] flex flex-col justify-between pt-16 sm:pt-20 pb-10 sm:pb-14 px-6 sm:px-12 md:px-16 lg:px-24 selection:bg-white selection:text-black border-t border-neutral-900 overflow-hidden">
       {/* Foreground Content */}
       <div className="relative z-10 flex flex-col justify-between flex-1 pointer-events-auto">
         {/* Top Metadata Spec Table with Clean Minimalist Editorial Styling */}

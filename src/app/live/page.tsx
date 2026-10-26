@@ -1,5 +1,15 @@
-import HomePage from "../page";
+"use client";
+
+import React, { Suspense } from "react";
+import GalleryPageContent from "@/components/GalleryPageContent";
+import { AuthProvider } from "@/lib/auth-context";
 
 export default function LivePage() {
-  return <HomePage initialFilter="concerts" />;
+  return (
+    <AuthProvider>
+      <Suspense fallback={null}>
+        <GalleryPageContent initialFilter="concerts" />
+      </Suspense>
+    </AuthProvider>
+  );
 }

@@ -231,7 +231,8 @@ export function subscribeToAboutContent(callback: (content: AboutContent) => voi
           }
         },
         (err) => {
-          console.warn("Firestore about content subscription notice:", err);
+          console.warn("Firestore about notice (using local storage fallback):", err?.message || err);
+          callback(getLocalAboutContent());
         }
       );
     } catch (err) {
@@ -244,7 +245,11 @@ export function subscribeToAboutContent(callback: (content: AboutContent) => voi
       window.removeEventListener("about_content_updated", handleLocalUpdate);
     }
     if (unsubFirestore) {
-      unsubFirestore();
+      try {
+        unsubFirestore();
+      } catch (unsubErr) {
+        console.debug("Firestore about unsubscribe suppressed:", unsubErr);
+      }
     }
   };
 }

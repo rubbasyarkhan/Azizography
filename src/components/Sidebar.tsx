@@ -6,11 +6,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { GalleryItem } from "@/types/gallery";
 import { normalizeCategory, getCategoryDisplayLabel } from "@/lib/filter-utils";
-import { getAllCategories, CategoryOption } from "@/lib/category-service";
+import { getAllCategories } from "@/lib/category-service";
 
 interface SidebarProps {
   items: GalleryItem[];
   activeFilter?: string;
+  activeCategory?: string;
+  activeSub?: string;
+  onSelectCategory?: (category: string) => void;
+  onSelectSub?: (category: string, sub: string) => void;
   onSelectFilter?: (filter: string) => void;
   brandName?: string;
 }
@@ -19,12 +23,16 @@ interface CategoryGroup {
   key: string;
   label: string;
   count: number;
-  series: Array<{ name: string; count: number }>;
+  subcategories: Array<{ name: string; count: number }>;
 }
 
 function Sidebar({
   items,
   activeFilter = "all",
+  activeCategory,
+  activeSub,
+  onSelectCategory,
+  onSelectSub,
   onSelectFilter,
   brandName = "Azizography.",
 }: SidebarProps) {
@@ -33,23 +41,27 @@ function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
 
-  // Group gallery items by category and collect series / projects under each category
+  // Current active category key & subcategory name (supporting both new props and legacy activeFilter)
+  const effectiveCategory = activeCategory || (activeFilter !== "all" ? activeFilter : "");
+  const effectiveSub = activeSub || "";
+
+  // Group gallery items by category and collect subcategories under each category
   const categoryGroups = useMemo<CategoryGroup[]>(() => {
     const allKnownCats = getAllCategories(items);
     const groupsMap = new Map<string, CategoryGroup>();
 
-    // Initialize with known categories
+    // 1. Initialize with registered categories
     for (const cat of allKnownCats) {
       groupsMap.set(cat.key, {
         key: cat.key,
         label: cat.label,
         count: 0,
-        series: [],
+        subcategories: [],
       });
     }
 
-    // Populate counts and series from visible gallery items
-    const seriesPerCategory = new Map<string, Map<string, number>>();
+    // 2. Tally items and collect subcategories
+    const subsPerCategory = new Map<string, Map<string, number>>();
 
     for (const item of items) {
       if (item.isVisible === false) continue;
@@ -61,60 +73,77 @@ function Sidebar({
           key: catKey,
           label: getCategoryDisplayLabel(rawCat),
           count: 0,
-          series: [],
+          subcategories: [],
         });
       }
 
       const grp = groupsMap.get(catKey)!;
       grp.count += 1;
 
-      // Track series/projects belonging to this category
-      if (item.seriesOrProject && item.seriesOrProject.trim()) {
-        const seriesName = item.seriesOrProject.trim();
-        if (!seriesPerCategory.has(catKey)) {
-          seriesPerCategory.set(catKey, new Map<string, number>());
+      const subName = (item.subcategory || item.seriesOrProject || "").trim();
+      if (subName) {
+        if (!subsPerCategory.has(catKey)) {
+          subsPerCategory.set(catKey, new Map<string, number>());
         }
-        const sMap = seriesPerCategory.get(catKey)!;
-        sMap.set(seriesName, (sMap.get(seriesName) || 0) + 1);
+        const sMap = subsPerCategory.get(catKey)!;
+        sMap.set(subName, (sMap.get(subName) || 0) + 1);
       }
     }
 
-    // Attach sorted series to each category
+    // Also include pre-configured subcategories from category definitions
+    for (const cat of allKnownCats) {
+      const catKey = cat.key;
+      if (cat.subcategories && cat.subcategories.length > 0) {
+        if (!subsPerCategory.has(catKey)) {
+          subsPerCategory.set(catKey, new Map<string, number>());
+        }
+        const sMap = subsPerCategory.get(catKey)!;
+        for (const s of cat.subcategories) {
+          if (!sMap.has(s)) {
+            sMap.set(s, 0);
+          }
+        }
+      }
+    }
+
+    // Attach sorted subcategories to each group
     groupsMap.forEach((grp, catKey) => {
-      const sMap = seriesPerCategory.get(catKey);
+      const sMap = subsPerCategory.get(catKey);
       if (sMap && sMap.size > 0) {
-        grp.series = Array.from(sMap.entries()).map(([name, count]) => ({
+        grp.subcategories = Array.from(sMap.entries()).map(([name, count]) => ({
           name,
           count,
         }));
       }
     });
 
-    // Only display categories that contain items (or default list if empty archive)
-    const result = Array.from(groupsMap.values()).filter(
+    // Only display categories with items (or all if archive is completely empty)
+    return Array.from(groupsMap.values()).filter(
       (g) => g.count > 0 || items.length === 0
     );
-
-    return result;
   }, [items]);
 
-  // Automatically expand category if active filter matches category or any of its series
+  // Automatically expand category if active category or subcategory matches
   useEffect(() => {
-    if (!activeFilter || activeFilter === "all") return;
-    const fLower = activeFilter.toLowerCase().trim();
-    const fNorm = normalizeCategory(fLower);
+    if (!effectiveCategory || effectiveCategory === "all") return;
+    const catNorm = normalizeCategory(effectiveCategory);
 
     for (const grp of categoryGroups) {
-      const catMatches = grp.key === fNorm || grp.label.toLowerCase() === fLower;
-      const seriesMatches = grp.series.some(
-        (s) => s.name.toLowerCase().trim() === fLower
-      );
+      const catMatches =
+        grp.key === catNorm ||
+        normalizeCategory(grp.label) === catNorm;
 
-      if (catMatches || seriesMatches) {
+      const subMatches = grp.subcategories.some((s) => {
+        const sLower = s.name.toLowerCase().trim();
+        const curLower = effectiveSub.toLowerCase().trim();
+        return sLower === curLower || sLower === catNorm;
+      });
+
+      if (catMatches || subMatches) {
         setOpenCategories((prev) => ({ ...prev, [grp.key]: true }));
       }
     }
-  }, [activeFilter, categoryGroups]);
+  }, [effectiveCategory, effectiveSub, categoryGroups]);
 
   const toggleCategory = (catKey: string) => {
     setOpenCategories((prev) => ({
@@ -123,103 +152,57 @@ function Sidebar({
     }));
   };
 
-  const handleSelectFilter = (filterVal: string) => {
+  const handleCategoryClick = (catKey: string) => {
     setMobileOpen(false);
-    if (pathname === "/") {
-      onSelectFilter?.(filterVal);
-      if (typeof window !== "undefined") {
-        const url = filterVal === "all" ? "/" : `/?filter=${encodeURIComponent(filterVal)}`;
-        window.history.pushState(null, "", url);
-      }
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (onSelectCategory) {
+      onSelectCategory(catKey);
+    } else if (onSelectFilter) {
+      onSelectFilter(catKey);
     } else {
-      router.push(filterVal === "all" ? "/" : `/?filter=${encodeURIComponent(filterVal)}`);
+      router.push(`/gallery?category=${encodeURIComponent(catKey)}`);
     }
   };
 
-  const isOverviewActive = pathname === "/" && activeFilter === "all";
-  const isAboutActive = pathname === "/about";
-  const isContactActive = pathname === "/contact";
+  const handleSubClick = (catKey: string, subName: string) => {
+    setMobileOpen(false);
+    if (onSelectSub) {
+      onSelectSub(catKey, subName);
+    } else if (onSelectFilter) {
+      onSelectFilter(subName);
+    } else {
+      router.push(
+        `/gallery?category=${encodeURIComponent(catKey)}&sub=${encodeURIComponent(subName)}`
+      );
+    }
+  };
+
+  const isCategorySelected = (grpKey: string) => {
+    if (effectiveSub && effectiveSub !== "all") return false;
+    const current = effectiveCategory.toLowerCase().trim();
+    const target = grpKey.toLowerCase().trim();
+    return (
+      current === target ||
+      normalizeCategory(current) === normalizeCategory(target)
+    );
+  };
+
+  const isSubSelected = (subName: string) => {
+    const currentSub = effectiveSub.toLowerCase().trim();
+    const targetSub = subName.toLowerCase().trim();
+    return currentSub === targetSub || currentSub.includes(targetSub) || targetSub.includes(currentSub);
+  };
 
   const sidebarContent = (
-    <div className="flex flex-col min-h-full py-8 md:py-14 px-6 md:px-10 text-neutral-900 select-none">
-      {/* Brand Header */}
-      <div className="mb-8 md:mb-10">
-        <Link
-          href="/"
-          onClick={(e) => {
-            if (pathname === "/") {
-              e.preventDefault();
-              handleSelectFilter("all");
-            }
-          }}
-          className="inline-block group"
-        >
-          <h1 className="font-artistic font-semibold text-3xl sm:text-[36px] tracking-[0.02em] text-neutral-950 group-hover:opacity-75 transition-opacity leading-none">
-            {brandName}
-          </h1>
-        </Link>
-      </div>
+    <div className="flex flex-col min-h-full py-6 md:py-8 px-6 md:px-10 text-neutral-900 select-none">
+      {/* Dynamic Categories & Subcategories List */}
+      <div className="flex flex-col space-y-3.5 text-[15.5px] sm:text-[16.5px] font-serif-elegant pb-12">
+        <span className="text-[10px] font-syne tracking-[0.22em] text-neutral-400 uppercase font-semibold block mb-1">
+          Collections
+        </span>
 
-      {/* Top Core Navigation: Overview, About, Contact */}
-      <div className="flex flex-col space-y-2 text-[12.5px] sm:text-[13px] font-syne tracking-[0.18em] uppercase">
-        <Link
-          href="/"
-          onClick={(e) => {
-            if (pathname === "/") {
-              e.preventDefault();
-              handleSelectFilter("all");
-            }
-          }}
-          className={`text-left transition-colors duration-150 ${
-            isOverviewActive
-              ? "text-neutral-950 font-bold"
-              : "text-neutral-400 hover:text-neutral-950 font-medium"
-          }`}
-        >
-          Overview
-        </Link>
-
-        <Link
-          href="/about"
-          onClick={() => setMobileOpen(false)}
-          className={`text-left transition-colors duration-150 ${
-            isAboutActive
-              ? "text-neutral-950 font-bold"
-              : "text-neutral-400 hover:text-neutral-950 font-medium"
-          }`}
-        >
-          About
-        </Link>
-
-        <Link
-          href="/contact"
-          onClick={() => setMobileOpen(false)}
-          className={`text-left transition-colors duration-150 ${
-            isContactActive
-              ? "text-neutral-950 font-bold"
-              : "text-neutral-400 hover:text-neutral-950 font-medium"
-          }`}
-        >
-          Contact
-        </Link>
-      </div>
-
-      {/* Separator before categories */}
-      <div className="mt-8 pt-6 border-t border-black/[0.06]" />
-
-      {/* Categories Dropdown List with Nested Series / Projects (No Hashtags) */}
-      <div className="flex flex-col space-y-3 text-[15.5px] sm:text-[16.5px] font-serif-elegant pb-12">
         {categoryGroups.map((grp) => {
-          const filterLower = activeFilter.toLowerCase().trim();
-          const grpNorm = grp.key;
-          const isCategoryActive =
-            pathname === "/" &&
-            (filterLower === grpNorm ||
-              filterLower === grp.label.toLowerCase() ||
-              normalizeCategory(filterLower) === grpNorm);
-
-          const hasSeries = grp.series.length > 0;
+          const isCatActive = isCategorySelected(grp.key);
+          const hasSubs = grp.subcategories.length > 0;
           const isOpen = Boolean(openCategories[grp.key]);
 
           return (
@@ -229,32 +212,35 @@ function Sidebar({
                 <button
                   type="button"
                   onClick={() => {
-                    handleSelectFilter(grp.key);
-                    if (hasSeries && !isOpen) {
+                    handleCategoryClick(grp.key);
+                    if (hasSubs && !isOpen) {
                       setOpenCategories((prev) => ({ ...prev, [grp.key]: true }));
                     }
                   }}
-                  className={`text-left transition-colors duration-150 leading-snug cursor-pointer flex-1 ${
-                    isCategoryActive
-                      ? "text-neutral-950 font-medium italic underline underline-offset-4 decoration-black/30"
+                  className={`text-left transition-colors duration-150 leading-snug cursor-pointer flex-1 flex items-baseline justify-between pr-2 ${
+                    isCatActive
+                      ? "text-neutral-950 font-semibold italic underline underline-offset-4 decoration-black/40"
                       : "text-neutral-600 hover:text-neutral-950 font-normal"
                   }`}
                 >
                   <span>{grp.label}</span>
+                  <span className="text-[11px] font-mono text-neutral-400">
+                    ({grp.count})
+                  </span>
                 </button>
 
-                {hasSeries && (
+                {hasSubs && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleCategory(grp.key);
                     }}
-                    aria-label={`Toggle ${grp.label} dropdown`}
+                    aria-label={`Toggle ${grp.label} subcategories`}
                     className="p-1 text-neutral-400 hover:text-neutral-900 transition-transform duration-200 cursor-pointer"
                   >
                     <ChevronDown
-                      className={`w-4 h-4 transition-transform duration-200 ${
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
                         isOpen ? "rotate-180 text-neutral-900" : ""
                       }`}
                     />
@@ -262,42 +248,40 @@ function Sidebar({
                 )}
               </div>
 
-              {/* Nested Dropdown: Series / Projects in this category */}
-              {hasSeries && isOpen && (
-                <div className="flex flex-col space-y-1.5 pl-4 pt-2 pb-1 border-l border-black/[0.08] ml-1 mt-1 animate-fade-in">
-                  {/* Option to view All in this Category */}
+              {/* Nested Subcategories List */}
+              {hasSubs && isOpen && (
+                <div className="flex flex-col space-y-1.5 pl-3.5 pt-2 pb-1 border-l border-black/[0.08] ml-1 mt-1 animate-fade-in">
+                  {/* View All in Category */}
                   <button
                     type="button"
-                    onClick={() => handleSelectFilter(grp.key)}
-                    className={`text-left text-[13.5px] sm:text-[14px] transition-colors leading-snug cursor-pointer ${
-                      isCategoryActive
-                        ? "text-neutral-950 font-semibold"
+                    onClick={() => handleCategoryClick(grp.key)}
+                    className={`text-left text-[13px] sm:text-[13.5px] transition-colors leading-snug cursor-pointer ${
+                      isCatActive
+                        ? "text-neutral-950 font-semibold underline underline-offset-2"
                         : "text-neutral-400 hover:text-neutral-900 font-normal"
                     }`}
                   >
                     <span>All {grp.label}</span>
                   </button>
 
-                  {/* Individual Series / Projects */}
-                  {grp.series.map((s) => {
-                    const isSeriesActive =
-                      pathname === "/" &&
-                      filterLower === s.name.toLowerCase().trim();
+                  {/* Individual Subcategories */}
+                  {grp.subcategories.map((sub) => {
+                    const isSubActive = isSubSelected(sub.name);
 
                     return (
                       <button
-                        key={s.name}
+                        key={sub.name}
                         type="button"
-                        onClick={() => handleSelectFilter(s.name)}
-                        className={`text-left text-[14px] sm:text-[14.5px] transition-colors leading-snug cursor-pointer ${
-                          isSeriesActive
-                            ? "text-neutral-950 font-medium italic underline underline-offset-4 decoration-black/30"
+                        onClick={() => handleSubClick(grp.key, sub.name)}
+                        className={`text-left text-[13.5px] sm:text-[14px] transition-colors leading-snug cursor-pointer flex items-baseline justify-between pr-2 ${
+                          isSubActive
+                            ? "text-neutral-950 font-medium italic underline underline-offset-4 decoration-black/40"
                             : "text-neutral-600 hover:text-neutral-950 font-normal"
                         }`}
                       >
-                        <span>{s.name}</span>
-                        <span className="text-[11px] text-neutral-400 ml-1.5 font-sans">
-                          ({s.count})
+                        <span className="truncate">{sub.name}</span>
+                        <span className="text-[11px] font-mono text-neutral-400 shrink-0 ml-1.5">
+                          ({sub.count})
                         </span>
                       </button>
                     );
@@ -313,28 +297,21 @@ function Sidebar({
 
   return (
     <>
-      {/* Mobile Top Bar */}
-      <div className="lg:hidden sticky top-0 z-40 w-full bg-[#FAF9F6]/95 backdrop-blur-md px-6 py-4 flex items-center justify-between border-b border-black/[0.06]">
-        <Link
-          href="/"
-          onClick={(e) => {
-            if (pathname === "/") {
-              e.preventDefault();
-              handleSelectFilter("all");
-            }
-          }}
-          className="font-artistic font-semibold text-2xl tracking-[0.02em] text-neutral-950"
-        >
-          {brandName}
-        </Link>
+      {/* Mobile Collections Trigger (compact under Navbar) */}
+      <div className="lg:hidden w-full bg-[#FAF9F6] px-5 py-2.5 flex items-center justify-between border-b border-[#DDD6CA]/60 text-xs font-mono">
         <button
           type="button"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-1.5 text-neutral-800 hover:text-black focus:outline-none"
-          aria-label="Toggle menu"
+          onClick={() => setMobileOpen(true)}
+          className="flex items-center gap-2 px-3 py-1.5 bg-[#F4F0EA] border border-[#DDD6CA] text-stone-800 rounded-full font-semibold uppercase tracking-wider text-[11px] cursor-pointer hover:bg-[#EAE4D9]"
         >
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <span>Collections ({categoryGroups.length})</span>
+          <ChevronDown className="w-3.5 h-3.5 text-stone-600" />
         </button>
+        {effectiveCategory && effectiveCategory !== "all" && (
+          <span className="text-stone-500 font-mono text-[11px] uppercase tracking-wider truncate max-w-[160px]">
+            {effectiveCategory} {effectiveSub && effectiveSub !== "all" ? `· ${effectiveSub}` : ""}
+          </span>
+        )}
       </div>
 
       {/* Mobile Drawer */}
@@ -344,7 +321,7 @@ function Sidebar({
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute top-5 right-5 p-2 text-neutral-600 hover:text-black"
+              className="absolute top-5 right-5 p-2 text-neutral-600 hover:text-black cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -357,8 +334,8 @@ function Sidebar({
         </div>
       )}
 
-      {/* Desktop Sticky Left Sidebar */}
-      <aside className="hidden lg:block w-[280px] xl:w-[320px] shrink-0 h-screen sticky top-0 bg-[#FAF9F6] overflow-y-auto overflow-x-hidden border-r border-black/[0.05] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {/* Desktop Sticky Left Sidebar (Below sticky top Navbar) */}
+      <aside className="hidden lg:block w-[280px] xl:w-[320px] shrink-0 sticky top-16 sm:top-20 h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] bg-[#FAF9F6] overflow-y-auto overflow-x-hidden border-r border-black/[0.05] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {sidebarContent}
       </aside>
     </>

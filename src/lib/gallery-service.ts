@@ -19,19 +19,33 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebas
 const LOCAL_STORAGE_KEY = "azizography_gallery_items_v5";
 const DELETED_ITEMS_KEY = "azizography_deleted_item_ids_v1";
 
+// Default dummy/mock items that are permanently excluded from display
+export const LEGACY_DEFAULT_IDS = new Set<string>([
+  "item-1792541139389",
+  "item-1792453223650",
+  "item-1792523157717",
+  "sample-1",
+  "sample-2",
+  "sample-3",
+]);
+
 // In-memory cache to prevent redundant JSON.parse and sorting on every render
 let cachedItems: GalleryItem[] | null = null;
 
 // Helper to track permanently deleted items across sessions and syncs
 export function getDeletedItemIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+  const set = new Set<string>(LEGACY_DEFAULT_IDS);
+  if (typeof window === "undefined") return set;
   try {
     const raw = localStorage.getItem(DELETED_ITEMS_KEY);
-    if (!raw) return new Set();
+    if (!raw) return set;
     const parsed: string[] = JSON.parse(raw);
-    return new Set(parsed);
+    for (const id of parsed) {
+      set.add(id);
+    }
+    return set;
   } catch {
-    return new Set();
+    return set;
   }
 }
 
@@ -194,6 +208,9 @@ export function getLocalItems(): GalleryItem[] {
     const parsed: GalleryItem[] = JSON.parse(raw);
     const valid = parsed.filter((item) => !deletedIds.has(item.id));
     const healed = healAndSortGalleryItems(valid);
+    if (parsed.length !== valid.length) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(healed));
+    }
     cachedItems = healed;
     return cachedItems;
   } catch (err) {
@@ -249,29 +266,55 @@ export async function getGalleryItems(): Promise<GalleryItem[]> {
   return getLocalItems();
 }
 
-// Subscribe to real-time updates with optimized memory cleanup
+// Global shared subscriber set to prevent duplicate Firestore connections & view engine assertion crashes
+const galleryCallbacks = new Set<(items: GalleryItem[]) => void>();
+let globalFirestoreUnsubscribe: (() => void) | null = null;
+let teardownTimer: ReturnType<typeof setTimeout> | null = null;
+
+function broadcastGalleryItems(items: GalleryItem[]) {
+  galleryCallbacks.forEach((cb) => {
+    try {
+      cb(items);
+    } catch {
+      // safe
+    }
+  });
+}
+
+// Subscribe to real-time updates with shared connection and debounce
 export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void): () => void {
   if (typeof window === "undefined") {
     return () => {};
   }
 
-  let firestoreUnsubscribe: (() => void) | null = null;
+  // Cancel any pending teardown during route transitions / StrictMode remounts
+  if (teardownTimer) {
+    clearTimeout(teardownTimer);
+    teardownTimer = null;
+  }
 
-  // Local storage listener
+  // Register this subscriber
+  galleryCallbacks.add(callback);
+
+  // Local storage listener handler
   const handler = () => {
-    cachedItems = null; // Invalidate cache on external storage event
-    callback(getLocalItems());
+    cachedItems = null;
+    broadcastGalleryItems(getLocalItems());
   };
-  window.addEventListener("azizography_gallery_update", handler);
-  window.addEventListener("storage", handler);
 
-  // Initial emit from local
+  if (galleryCallbacks.size === 1) {
+    window.addEventListener("azizography_gallery_update", handler);
+    window.addEventListener("storage", handler);
+  }
+
+  // Immediately emit current cached/local state to new subscriber
   callback(getLocalItems());
 
-  if (isFirebaseConfigured && db) {
+  // Establish shared Firestore subscription if not already active
+  if (!globalFirestoreUnsubscribe && isFirebaseConfigured && db) {
     try {
       const q = query(collection(db, "gallery_items"), orderBy("orderIndex", "asc"));
-      firestoreUnsubscribe = onSnapshot(
+      globalFirestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
           const deletedIds = getDeletedItemIds();
@@ -281,23 +324,18 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
               ...d.data(),
             })) as GalleryItem[];
 
-            // Exclude any permanently deleted items
             const validFirestore = firestoreItems.filter((i) => !deletedIds.has(i.id));
             const healed = healAndSortGalleryItems(validFirestore);
             saveLocalItems(healed);
-            callback(healed);
+            broadcastGalleryItems(healed);
           } else {
-            // Live Firestore collection is empty (all gallery items wiped)
             saveLocalItems([]);
-            callback([]);
+            broadcastGalleryItems([]);
           }
         },
-        (error) => {
-          console.info(
-            "Firestore rules pending deployment in Firebase Console. Operating in local sync mode.",
-            error.message
-          );
-          callback(getLocalItems());
+        (err) => {
+          console.warn("Firestore gallery subscription notice (using local storage fallback):", err?.message || err);
+          broadcastGalleryItems(getLocalItems());
         }
       );
     } catch (err) {
@@ -306,9 +344,24 @@ export function subscribeToGalleryItems(callback: (items: GalleryItem[]) => void
   }
 
   return () => {
-    if (firestoreUnsubscribe) firestoreUnsubscribe();
-    window.removeEventListener("azizography_gallery_update", handler);
-    window.removeEventListener("storage", handler);
+    galleryCallbacks.delete(callback);
+    // Grace period before tearing down the Firestore connection
+    if (galleryCallbacks.size === 0) {
+      teardownTimer = setTimeout(() => {
+        if (galleryCallbacks.size === 0) {
+          if (globalFirestoreUnsubscribe) {
+            try {
+              globalFirestoreUnsubscribe();
+            } catch (unsubErr) {
+              console.debug("Firestore gallery unsubscribe suppressed:", unsubErr);
+            }
+            globalFirestoreUnsubscribe = null;
+          }
+          window.removeEventListener("azizography_gallery_update", handler);
+          window.removeEventListener("storage", handler);
+        }
+      }, 2500);
+    }
   };
 }
 

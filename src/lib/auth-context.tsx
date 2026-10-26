@@ -45,7 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setLoading(false);
       });
-      return () => unsubscribe();
+      return () => {
+        try {
+          unsubscribe();
+        } catch {
+          // Safe unsubscription cleanup
+        }
+      };
     } else {
       checkLocalSession();
       setLoading(false);

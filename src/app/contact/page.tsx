@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { GalleryItem } from "@/types/gallery";
 import { subscribeToGalleryItems } from "@/lib/gallery-service";
 import Sidebar from "@/components/Sidebar";
+import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
 import { CheckCircle2, Send } from "lucide-react";
@@ -34,7 +35,13 @@ function ContactContent() {
     const unsub = subscribeToGalleryItems((data) => {
       setItems(data);
     });
-    return () => unsub();
+    return () => {
+      try {
+        unsub();
+      } catch (e) {
+        console.warn("Contact items unsubscribe error:", e);
+      }
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,14 +102,16 @@ function ContactContent() {
   };
 
   return (
-    <main className="min-h-screen bg-[#FAF9F6] text-[#0A0A0A]">
-      <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* Editorial Left Sidebar (Jessica Chou Style) */}
-        <Sidebar items={items} />
+    <main className="relative min-h-screen bg-[#FAF9F6] text-[#0A0A0A] flex flex-col">
+      {/* Top Navigation Bar: FULL ARCHIVE, ABOUT, CONTACT */}
+      <Navbar items={items} />
+
+      <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+        <Sidebar items={items} brandName="Azizography." />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="w-full px-6 sm:px-12 lg:px-20 py-12 lg:py-20 max-w-5xl">
+        <div className="flex-1 w-full min-w-0">
+          <div className="w-full max-w-5xl px-6 sm:px-12 lg:px-16 py-12 lg:py-20">
             {/* Header */}
             <div className="pb-12 border-b border-[#DDD6CA]">
               <span className="text-[11px] font-syne uppercase tracking-[0.28em] text-[#78716C] block mb-2">
@@ -365,7 +374,7 @@ function ContactContent() {
         </div>
       </div>
 
-      {/* Full-Width & Section-Height Footer */}
+      {/* 100% Full-Width & Section-Height Footer */}
       <Footer />
     </main>
   );
@@ -374,7 +383,9 @@ function ContactContent() {
 export default function ContactPage() {
   return (
     <AuthProvider>
-      <ContactContent />
+      <Suspense fallback={null}>
+        <ContactContent />
+      </Suspense>
     </AuthProvider>
   );
 }

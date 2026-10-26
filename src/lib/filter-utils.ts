@@ -1,88 +1,25 @@
 import { GalleryItem } from "@/types/gallery";
 
-export const CATEGORY_DISPLAY_LABELS: Record<string, string> = {
-  people: "Portraits & People",
-  concerts: "Live & Concerts",
-  singers: "Vocalists & Singers",
-  weddings: "Weddings & Ceremonies",
-  events: "Festivals & Events",
-};
+export const CATEGORY_DISPLAY_LABELS: Record<string, string> = {};
 
 /**
  * Normalizes any category string or alias to a canonical key.
- * e.g., "Portraits & People" -> "people", "Live & Concerts" -> "concerts"
+ * e.g., "Portraits & People" -> "people", "Weddings & Ceremonies" -> "weddings"
  */
 export function normalizeCategory(val?: string): string {
   if (!val) return "";
-  const v = val.toLowerCase().trim();
-
-  // People & Portraits
-  if (
-    v === "people" ||
-    v === "portraits & people" ||
-    v === "portraits" ||
-    v === "portrait" ||
-    v === "portraiture" ||
-    v === "people / editorial" ||
-    v === "editorial"
-  ) {
-    return "people";
-  }
-
-  // Concerts & Live Music
-  if (
-    v === "concerts" ||
-    v === "live & concerts" ||
-    v === "live" ||
-    v === "concert" ||
-    v === "tour" ||
-    v === "live music"
-  ) {
-    return "concerts";
-  }
-
-  // Singers & Vocalists
-  if (
-    v === "singers" ||
-    v === "vocalists & singers" ||
-    v === "vocalists" ||
-    v === "singer" ||
-    v === "vocalist"
-  ) {
-    return "singers";
-  }
-
-  // Weddings
-  if (
-    v === "weddings" ||
-    v === "weddings & ceremonies" ||
-    v === "wedding" ||
-    v === "ceremonies" ||
-    v === "ceremony"
-  ) {
-    return "weddings";
-  }
-
-  // Events & Festivals
-  if (
-    v === "events" ||
-    v === "festivals & events" ||
-    v === "events & festivals" ||
-    v === "events and festivals" ||
-    v === "festivals" ||
-    v === "festival" ||
-    v === "event"
-  ) {
-    return "events";
-  }
-
-  return v;
+  return val
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 /**
  * Returns formatted display label for category
  */
 export function getCategoryDisplayLabel(cat: string): string {
+  if (!cat) return "";
   const norm = normalizeCategory(cat);
   if (CATEGORY_DISPLAY_LABELS[norm]) {
     return CATEGORY_DISPLAY_LABELS[norm];
@@ -118,6 +55,14 @@ export function itemMatchesFilter(item: GalleryItem, filterValue: string): boole
 
     const displayLabel = getCategoryDisplayLabel(item.category).toLowerCase().trim();
     if (displayLabel === f || displayLabel === normalizedF) {
+      return true;
+    }
+  }
+
+  // 1.5 Match subcategory
+  if (item.subcategory) {
+    const sub = item.subcategory.toLowerCase().trim();
+    if (sub === f || sub === normalizedF || sub.includes(f) || f.includes(sub)) {
       return true;
     }
   }
@@ -183,6 +128,7 @@ export function itemMatchesSearch(item: GalleryItem, query: string): boolean {
   const q = query.toLowerCase().trim();
 
   if (item.title && item.title.toLowerCase().includes(q)) return true;
+  if (item.subcategory && item.subcategory.toLowerCase().includes(q)) return true;
   if (item.seriesOrProject && item.seriesOrProject.toLowerCase().includes(q)) return true;
   if (item.artist && item.artist.toLowerCase().includes(q)) return true;
   if (item.location && item.location.toLowerCase().includes(q)) return true;
