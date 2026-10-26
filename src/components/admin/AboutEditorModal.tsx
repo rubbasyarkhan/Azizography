@@ -447,7 +447,7 @@ export default function AboutEditorModal({
                           <input
                             type="text"
                             required
-                            placeholder="VOGUE"
+                            placeholder="Client / Publication Name"
                             value={client.name}
                             onChange={(e) => handleUpdateClient(idx, "name", e.target.value)}
                             className="w-full px-2.5 py-1.5 bg-[#FAF7F2] border border-[#DDD6CA] rounded-lg text-xs font-bold text-[#1C1917] uppercase tracking-wider focus:outline-none focus:border-[#1C1917]"

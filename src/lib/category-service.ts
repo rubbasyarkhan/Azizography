@@ -12,26 +12,23 @@ export interface CategoryOption {
   count?: number;
 }
 
-const CATEGORIES_STORAGE_KEY = "azizography_categories_v3";
+const CATEGORIES_STORAGE_KEY = "azizography_categories_v4";
 
-// Initial seed matching user portfolio taxonomy
+export const LEGACY_MOCK_SUB_NAMES = new Set<string>([
+  "@boljanimusic",
+  "talha anjum (mr most stream)",
+  "talha anjum",
+]);
+
+// Clean default categories with zero mock subcategories
 export const SEED_CATEGORIES: CategoryDefinition[] = [
   {
     id: "cat-people",
     name: "People",
     slug: "people",
-    subcategories: ["@boljanimusic"],
-    description: "Editorial portraiture, intimate monographs, and authentic emotion.",
+    subcategories: [],
+    description: "Editorial portraiture, monographs, and artistic photography.",
     orderIndex: 0,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "cat-singers",
-    name: "Singers",
-    slug: "singers",
-    subcategories: ["Talha Anjum (Mr MOST STREAM)"],
-    description: "Recording artists, arena performances, and raw backstage captures.",
-    orderIndex: 1,
     createdAt: new Date().toISOString(),
   },
 ];
@@ -90,10 +87,16 @@ export function getCategories(items?: GalleryItem[]): CategoryDefinition[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        inMemoryCategories = parsed;
+        const cleaned: CategoryDefinition[] = parsed.map((cat: CategoryDefinition) => ({
+          ...cat,
+          subcategories: (cat.subcategories || []).filter(
+            (s: string) => !LEGACY_MOCK_SUB_NAMES.has(s.trim().toLowerCase())
+          ),
+        }));
+        inMemoryCategories = cleaned;
         return items && items.length > 0
-          ? healCategoriesWithItems(parsed, items)
-          : parsed;
+          ? healCategoriesWithItems(cleaned, items)
+          : cleaned;
       }
     }
   } catch (e) {
@@ -518,11 +521,17 @@ export function subscribeToCategories(
         async (snap) => {
           if (snap.exists() && Array.isArray(snap.data()?.list)) {
             const remoteList: CategoryDefinition[] = snap.data().list;
-            inMemoryCategories = remoteList;
+            const cleaned: CategoryDefinition[] = remoteList.map((cat: CategoryDefinition) => ({
+              ...cat,
+              subcategories: (cat.subcategories || []).filter(
+                (s: string) => !LEGACY_MOCK_SUB_NAMES.has(s.trim().toLowerCase())
+              ),
+            }));
+            inMemoryCategories = cleaned;
             try {
-              localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(remoteList));
+              localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(cleaned));
             } catch {}
-            broadcastCategories(remoteList);
+            broadcastCategories(cleaned);
           } else if (!snap.exists()) {
             // Seed DB on first boot
             try {

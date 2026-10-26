@@ -255,7 +255,7 @@ export default function CategoryManagerModal({
                     type="text"
                     value={newCatSubs}
                     onChange={(e) => setNewCatSubs(e.target.value)}
-                    placeholder="e.g. @boljanimusic, Studio Sessions"
+                    placeholder="e.g. Studio, Monograph, Stage"
                     className="w-full bg-[#FAF7F2] border border-[#DDD6CA] px-3 py-2 text-sm text-[#1C1917] rounded-lg focus:outline-none focus:border-[#1C1917]"
                   />
                 </div>

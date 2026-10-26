@@ -367,7 +367,7 @@ export default function EditItemModal({
                           setSubcategory(e.target.value);
                         }
                       }}
-                      placeholder="e.g. Mayun, Barat, or Talha Anjum"
+                      placeholder="e.g. Studio, Series, or Project Title"
                       className="flex-1 bg-[#F4F0EA] border border-[#DDD6CA] px-3.5 py-2.5 text-[#1C1917] placeholder:text-stone-400 text-sm sm:text-base rounded-lg focus:outline-none focus:border-[#1C1917] transition-colors"
                     />
                     {isAddingNewSub && (

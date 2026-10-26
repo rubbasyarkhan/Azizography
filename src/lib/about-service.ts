@@ -28,117 +28,49 @@ export interface AboutContent {
   updatedAt?: string;
 }
 
-export const DEFAULT_CLIENT_ITEMS: ClientItem[] = [
-  {
-    id: "vogue",
-    name: "VOGUE",
-    category: "High Fashion Editorial",
-    imageUrl: "",
-  },
-  {
-    id: "rolling-stone",
-    name: "ROLLING STONE",
-    category: "Arena Tour & Stage",
-    imageUrl: "",
-  },
-  {
-    id: "gq-magazine",
-    name: "GQ MAGAZINE",
-    category: "Celebrity Portraiture",
-    imageUrl: "",
-  },
-  {
-    id: "wired",
-    name: "WIRED",
-    category: "Visionary & Innovation",
-    imageUrl: "",
-  },
-  {
-    id: "netflix",
-    name: "NETFLIX",
-    category: "Series Campaign & Backstage",
-    imageUrl: "",
-  },
-  {
-    id: "marie-claire",
-    name: "MARIE CLAIRE",
-    category: "Beauty & Haute Couture",
-    imageUrl: "",
-  },
-  {
-    id: "fast-company",
-    name: "FAST COMPANY",
-    category: "Cultural Leadership",
-    imageUrl: "",
-  },
-  {
-    id: "billboard",
-    name: "BILLBOARD",
-    category: "Stadium Headliners",
-    imageUrl: "",
-  },
-  {
-    id: "sony-music",
-    name: "SONY MUSIC",
-    category: "Recording Artist Roster",
-    imageUrl: "",
-  },
-  {
-    id: "coachella",
-    name: "COACHELLA",
-    category: "Festival Live Visuals",
-    imageUrl: "",
-  },
-  {
-    id: "universal-music",
-    name: "UNIVERSAL MUSIC",
-    category: "World Tour Documentation",
-    imageUrl: "",
-  },
-  {
-    id: "leica-archive",
-    name: "LEICA ARCHIVE",
-    category: "Direct-Flash Monograph",
-    imageUrl: "",
-  },
-];
+export const DEFAULT_MOCK_CLIENT_IDS = new Set<string>([
+  "vogue",
+  "rolling-stone",
+  "gq-magazine",
+  "wired",
+  "netflix",
+  "marie-claire",
+  "fast-company",
+  "billboard",
+  "sony-music",
+  "coachella",
+  "universal-music",
+  "leica-archive",
+]);
+
+export const DEFAULT_CLIENT_ITEMS: ClientItem[] = [];
 
 export const DEFAULT_ABOUT_CONTENT: AboutContent = {
   portraitImageUrl: "",
-  locationBadge: "AZIZ // LOS ANGELES • NYC • All over Karachi",
-  headline: "Documenting live arena energy, intimate backstage honesty, and editorial portraiture.",
-  bioParagraph1: "Aziz is an editorial, portrait, and live tour photographer based between Los Angeles and New York City. His work bridges the kinetic atmosphere of world-stadium tours with the quiet authenticity of direct-flash portraiture.",
-  bioParagraph2: "Capturing high-profile editorial assignments for WIRED, Marie Claire, Netflix, and Fast Company, as well as official tour photography for leading global musical artists, Aziz prioritizes raw visual truth and natural geometry over digital artifice.",
-  clients: DEFAULT_CLIENT_ITEMS,
-  selectedClients: DEFAULT_CLIENT_ITEMS.map((c) => c.name),
+  locationBadge: "AZIZ // KARACHI, PAKISTAN",
+  headline: "Documenting live visual stories, monographs, and portraiture.",
+  bioParagraph1: "Aziz is an editorial and portrait photographer documenting stories with authentic emotion and natural geometry.",
+  bioParagraph2: "",
+  clients: [],
+  selectedClients: [],
 };
 
-const LOCAL_STORAGE_KEY = "azizography_about_content_v3";
+const LOCAL_STORAGE_KEY = "azizography_about_content_v4";
 let cachedContent: AboutContent | null = null;
 
 function normalizeClientList(parsed: Partial<AboutContent>): ClientItem[] {
   if (Array.isArray(parsed.clients) && parsed.clients.length > 0) {
-    return parsed.clients.map((c, idx) => ({
-      id: c.id || `client-${idx}-${Date.now()}`,
-      name: c.name || "CLIENT",
-      category: c.category || "Editorial",
-      imageUrl: c.imageUrl || "",
-    }));
+    return parsed.clients
+      .filter((c) => !DEFAULT_MOCK_CLIENT_IDS.has((c.id || "").toLowerCase()))
+      .map((c, idx) => ({
+        id: c.id || `client-${idx}-${Date.now()}`,
+        name: c.name || "CLIENT",
+        category: c.category || "Editorial",
+        imageUrl: c.imageUrl || "",
+      }));
   }
 
-  if (Array.isArray(parsed.selectedClients) && parsed.selectedClients.length > 0) {
-    return parsed.selectedClients.map((name, idx) => {
-      const match = DEFAULT_CLIENT_ITEMS.find((d) => d.name.toLowerCase() === name.toLowerCase());
-      return {
-        id: match ? match.id : `client-${idx}`,
-        name: name.toUpperCase(),
-        category: match?.category || "Editorial Publication",
-        imageUrl: match?.imageUrl || "",
-      };
-    });
-  }
-
-  return DEFAULT_CLIENT_ITEMS;
+  return [];
 }
 
 export function getLocalAboutContent(): AboutContent {

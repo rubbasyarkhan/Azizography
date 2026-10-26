@@ -2,9 +2,9 @@ export type GalleryCategory = string;
 
 export interface CategoryDefinition {
   id: string;
-  name: string; // e.g. "Wedding", "Artist"
-  slug: string; // normalized key e.g. "wedding", "artist"
-  subcategories: string[]; // e.g. ["Mayun", "Barat", "Walima"] or ["Talha Anjum", "Bohemia", "Eminem"]
+  name: string; // e.g. "People", "Concerts"
+  slug: string; // normalized key e.g. "people", "concerts"
+  subcategories: string[]; // e.g. ["Studio", "Stage", "Monograph"]
   description?: string;
   coverImageUrl?: string;
   orderIndex?: number;
@@ -16,7 +16,7 @@ export interface GalleryItem {
   id: string;
   title: string;
   category: GalleryCategory;
-  subcategory?: string; // e.g. "Mayun", "Barat", "Walima" or "Talha Anjum", "Bohemia", "Eminem"
+  subcategory?: string; // e.g. "Studio", "Stage", "Monograph"
   seriesOrProject?: string; // e.g. "Netflix x The Four Seasons", "Taika Waititi for WIRED", "The Weeknd // After Hours"
   imageUrl: string;
   storagePath: string;

@@ -63,10 +63,7 @@ function AboutContent() {
 
   const displayPortraitUrl = about.portraitImageUrl || portraitItem?.imageUrl;
   const clientList: ClientItem[] = useMemo(() => {
-    if (about.clients && about.clients.length > 0) {
-      return about.clients;
-    }
-    return DEFAULT_ABOUT_CONTENT.clients;
+    return about.clients || [];
   }, [about.clients]);
 
   return (
@@ -149,15 +146,15 @@ function AboutContent() {
               <div className="md:col-span-7 space-y-6">
                 <div>
                   <span className="text-[11px] font-syne text-[#78716C] uppercase tracking-[0.28em] block mb-2">
-                    BIOGRAPHY & STATEMENT
+                    BIOGRAPHY &amp; STATEMENT
                   </span>
                   <h2 className="font-artistic text-3xl sm:text-4xl lg:text-5xl font-semibold italic text-[#1C1917] leading-[1.15]">
-                    {about.headline || "Documenting live arena energy, intimate backstage honesty, and editorial portraiture."}
+                    {about.headline || "Documenting live visual stories, monographs, and portraiture."}
                   </h2>
                 </div>
 
                 <p className="font-sans text-sm sm:text-[15px] text-[#57534E] leading-relaxed whitespace-pre-line">
-                  {about.bioParagraph1 || "Aziz is an editorial, portrait, and live tour photographer based between Los Angeles and New York City. His work bridges the kinetic atmosphere of world-stadium tours with the quiet authenticity of direct-flash portraiture."}
+                  {about.bioParagraph1 || "Aziz is an editorial and portrait photographer documenting stories with authentic emotion, raw honesty, and natural geometry."}
                 </p>
 
                 {about.bioParagraph2 && (
@@ -178,64 +175,64 @@ function AboutContent() {
               </div>
             </div>
 
-            {/* Selected Clients & Editorial Publications (2 in a Row Grid Layout with Interactive Image Cursor) */}
-            <div className="py-16">
-              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between mb-8 pb-4 border-b border-[#DDD6CA]">
-                <div>
-                  <span className="text-[11px] font-syne text-[#78716C] uppercase tracking-[0.28em] block mb-1">
-                    SELECTED CLIENTS & EDITORIAL PUBLICATIONS
+            {/* Selected Clients & Editorial Publications (Rendered only when real commissions exist) */}
+            {clientList && clientList.length > 0 && (
+              <div className="py-16">
+                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between mb-8 pb-4 border-b border-[#DDD6CA]">
+                  <div>
+                    <span className="text-[11px] font-syne text-[#78716C] uppercase tracking-[0.28em] block mb-1">
+                      SELECTED CLIENTS &amp; COMMISSIONS
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono-brutal text-stone-500 mt-1 sm:mt-0">
+                    {clientList.length} COMMISSIONS
                   </span>
-
                 </div>
-                <span className="text-xs font-mono-brutal text-stone-500 mt-1 sm:mt-0">
-                  {clientList.length} COMMISSIONS
-                </span>
-              </div>
 
-              {/* 2 in a Row Grid (Mobile: 1 col, Tablet/Desktop: 2 in a row) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 lg:gap-x-16">
-                {clientList.map((client, idx) => (
-                  <div
-                    key={client.id || idx}
-                    onMouseEnter={() => setHoveredClient(client)}
-                    onMouseLeave={() => setHoveredClient(null)}
-                    className="group relative flex items-center justify-between py-4 sm:py-5 border-b border-[#DDD6CA]/70 cursor-pointer transition-all duration-200 hover:border-[#1C1917]"
-                  >
-                    <div className="flex items-baseline gap-4 sm:gap-6 min-w-0 pr-3">
-                      <span className="font-mono-brutal text-[11px] sm:text-xs text-[#78716C] group-hover:text-[#1C1917] transition-colors shrink-0">
-                        {String(idx + 1).padStart(2, "0")}
-                      </span>
-                      <div className="min-w-0">
-                        <h3 className="font-artistic text-xl sm:text-2xl lg:text-3xl font-medium italic text-[#1C1917] group-hover:translate-x-1 transition-all duration-300 truncate">
-                          {client.name}
-                        </h3>
-                        {client.category && (
-                          <p className="font-syne text-[10px] sm:text-[11px] text-[#78716C] uppercase tracking-[0.2em] mt-0.5 group-hover:text-[#57534E] transition-colors">
-                            {client.category}
-                          </p>
+                {/* 2 in a Row Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 lg:gap-x-16">
+                  {clientList.map((client, idx) => (
+                    <div
+                      key={client.id || idx}
+                      onMouseEnter={() => setHoveredClient(client)}
+                      onMouseLeave={() => setHoveredClient(null)}
+                      className="group relative flex items-center justify-between py-4 sm:py-5 border-b border-[#DDD6CA]/70 cursor-pointer transition-all duration-200 hover:border-[#1C1917]"
+                    >
+                      <div className="flex items-baseline gap-4 sm:gap-6 min-w-0 pr-3">
+                        <span className="font-mono-brutal text-[11px] sm:text-xs text-[#78716C] group-hover:text-[#1C1917] transition-colors shrink-0">
+                          {String(idx + 1).padStart(2, "0")}
+                        </span>
+                        <div className="min-w-0">
+                          <h3 className="font-artistic text-xl sm:text-2xl lg:text-3xl font-medium italic text-[#1C1917] group-hover:translate-x-1 transition-all duration-300 truncate">
+                            {client.name}
+                          </h3>
+                          {client.category && (
+                            <p className="font-syne text-[10px] sm:text-[11px] text-[#78716C] uppercase tracking-[0.2em] mt-0.5 group-hover:text-[#57534E] transition-colors">
+                              {client.category}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right Side: Mobile Inline Visual & Arrow */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {client.imageUrl && (
+                          <div className="md:hidden w-12 h-14 rounded-md overflow-hidden bg-stone-200 border border-[#DDD6CA] shrink-0">
+                            <img
+                              src={client.imageUrl}
+                              alt={client.name}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
                         )}
+                        <ArrowRight className="w-4 h-4 text-[#78716C] group-hover:text-[#1C1917] group-hover:translate-x-1 transition-all duration-300 hidden sm:block" />
                       </div>
                     </div>
-
-                    {/* Right Side: Mobile Inline Visual & Arrow */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      {/* Mobile thumbnail when an image is uploaded for this client */}
-                      {client.imageUrl && (
-                        <div className="md:hidden w-12 h-14 rounded-md overflow-hidden bg-stone-200 border border-[#DDD6CA] shrink-0">
-                          <img
-                            src={client.imageUrl}
-                            alt={client.name}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-                      <ArrowRight className="w-4 h-4 text-[#78716C] group-hover:text-[#1C1917] group-hover:translate-x-1 transition-all duration-300 hidden sm:block" />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
