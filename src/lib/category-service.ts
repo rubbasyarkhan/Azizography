@@ -1,7 +1,8 @@
 import { db, isFirebaseConfigured } from "./firebase";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { GalleryItem, CategoryDefinition } from "@/types/gallery";
 import { normalizeCategory, getCategoryDisplayLabel } from "./filter-utils";
+import { getLocalItems, saveLocalItems } from "./gallery-service";
 
 export interface CategoryOption {
   key: string;
@@ -38,92 +39,50 @@ export const SEED_CATEGORIES: CategoryDefinition[] = [
 let inMemoryCategories: CategoryDefinition[] | null = null;
 
 /**
- * Heals category list with any real categories present on active gallery items.
- * Removes empty obsolete placeholder categories (like dummy wedding/artist with 0 items).
+ * Attaches real-time item counts to authoritative categories.
+ * The DB categories list is authoritative: this function NEVER invents or
+ * resurrects deleted categories or subcategories from stale gallery items.
  */
 export function healCategoriesWithItems(
   existingCategories: CategoryDefinition[],
   items?: GalleryItem[]
 ): CategoryDefinition[] {
+  const baseList =
+    existingCategories && existingCategories.length > 0
+      ? existingCategories
+      : SEED_CATEGORIES;
+
   if (!items || !Array.isArray(items) || items.length === 0) {
-    return existingCategories;
+    return baseList;
   }
 
-  const map = new Map<string, CategoryDefinition>();
+  return baseList.map((cat) => {
+    const catSlug = cat.slug || normalizeCategory(cat.name);
+    const catNameLower = cat.name.toLowerCase().trim();
 
-  // 1. Index existing categories
-  for (const c of existingCategories) {
-    const slug = c.slug || normalizeCategory(c.name);
-    map.set(slug, {
-      ...c,
-      slug,
-      name: c.name || getCategoryDisplayLabel(slug),
-      subcategories: [...(c.subcategories || [])],
-    });
-  }
-
-  // 2. Discover categories & subcategories from items
-  for (const item of items) {
-    if (item.isVisible === false || !item.imageUrl) continue;
-    const rawCat = (item.category || "people").trim();
-    const slug = normalizeCategory(rawCat);
-    const subName = (item.subcategory || item.seriesOrProject || "").trim();
-
-    if (!map.has(slug)) {
-      map.set(slug, {
-        id: `cat-${slug}`,
-        name: getCategoryDisplayLabel(rawCat),
-        slug,
-        subcategories: subName ? [subName] : [],
-        description:
-          slug === "people"
-            ? "Editorial portraiture, intimate monographs, and authentic emotion."
-            : slug === "singers"
-            ? "Recording artists, arena performances, and raw backstage captures."
-            : `Curated ${rawCat} monographs and artistic photography.`,
-        orderIndex: map.size,
-        createdAt: new Date().toISOString(),
-      });
-    } else {
-      const existing = map.get(slug)!;
-      if (subName && !existing.subcategories.some((s) => s.toLowerCase() === subName.toLowerCase())) {
-        existing.subcategories.push(subName);
-      }
-    }
-  }
-
-  // 3. Count items in each category
-  const list = Array.from(map.values()).map((c) => {
     const count = items.filter((i) => {
       if (i.isVisible === false || !i.imageUrl) return false;
-      const norm = normalizeCategory(i.category || "people");
-      return norm === c.slug || norm === normalizeCategory(c.name);
+      const raw = (i.category || "").toLowerCase().trim();
+      const norm = normalizeCategory(i.category || "");
+      return norm === catSlug || raw === catNameLower;
     }).length;
-    return { ...c, count };
+
+    return { ...cat, count };
   });
-
-  // 4. If we have categories with items, filter out obsolete categories with 0 items
-  const hasPopulated = list.some((c) => (c.count || 0) > 0);
-  let result = list;
-  if (hasPopulated) {
-    result = list.filter((c) => (c.count || 0) > 0);
-  }
-
-  return result.map(({ count, ...rest }) => rest);
 }
 
 export function getCategories(items?: GalleryItem[]): CategoryDefinition[] {
   if (inMemoryCategories && inMemoryCategories.length > 0) {
     if (items && Array.isArray(items) && items.length > 0) {
-      const healed = healCategoriesWithItems(inMemoryCategories, items);
-      inMemoryCategories = healed;
-      return healed;
+      return healCategoriesWithItems(inMemoryCategories, items);
     }
     return inMemoryCategories;
   }
 
   if (typeof window === "undefined") {
-    return items && items.length > 0 ? healCategoriesWithItems(SEED_CATEGORIES, items) : SEED_CATEGORIES;
+    return items && items.length > 0
+      ? healCategoriesWithItems(SEED_CATEGORIES, items)
+      : SEED_CATEGORIES;
   }
 
   try {
@@ -131,22 +90,29 @@ export function getCategories(items?: GalleryItem[]): CategoryDefinition[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const healed = items && items.length > 0 ? healCategoriesWithItems(parsed, items) : parsed;
-        inMemoryCategories = healed;
-        return healed;
+        inMemoryCategories = parsed;
+        return items && items.length > 0
+          ? healCategoriesWithItems(parsed, items)
+          : parsed;
       }
     }
   } catch (e) {
     console.warn("Could not read categories from localStorage:", e);
   }
 
-  const initial = items && items.length > 0 ? healCategoriesWithItems(SEED_CATEGORIES, items) : SEED_CATEGORIES;
-  inMemoryCategories = initial;
-  return initial;
+  inMemoryCategories = SEED_CATEGORIES;
+  return items && items.length > 0
+    ? healCategoriesWithItems(SEED_CATEGORIES, items)
+    : SEED_CATEGORIES;
 }
 
-export function saveCategories(categories: CategoryDefinition[]): void {
+/**
+ * Persists categories directly to Firestore DB and local storage,
+ * and notifies all active client listeners.
+ */
+export async function saveCategories(categories: CategoryDefinition[]): Promise<void> {
   inMemoryCategories = categories;
+
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
@@ -161,8 +127,13 @@ export function saveCategories(categories: CategoryDefinition[]): void {
   if (isFirebaseConfigured && db) {
     try {
       const docRef = doc(db, "site_metadata", "categories_v3");
-      setDoc(docRef, { list: categories, updatedAt: new Date().toISOString() }, { merge: true }).catch(
-        (err) => console.warn("Firestore categories sync notice:", err)
+      await setDoc(
+        docRef,
+        {
+          list: categories,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
       );
     } catch (err) {
       console.warn("Firestore categories write notice:", err);
@@ -181,20 +152,29 @@ export async function addCategory(
     throw new Error("Category name cannot be empty");
   }
 
-  const slug = normalizeCategory(trimmed) || trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug =
+    normalizeCategory(trimmed) ||
+    trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const current = getCategories();
   const existing = current.find(
     (c) => c.slug === slug || c.name.toLowerCase() === trimmed.toLowerCase()
   );
 
   if (existing) {
-    // If new subcategories provided, merge them
     if (subcategories.length > 0) {
-      const mergedSubs = Array.from(new Set([...(existing.subcategories || []), ...subcategories]));
-      const updated = current.map((c) =>
-        c.id === existing.id ? { ...c, subcategories: mergedSubs, description: description?.trim() || c.description } : c
+      const mergedSubs = Array.from(
+        new Set([...(existing.subcategories || []), ...subcategories])
       );
-      saveCategories(updated);
+      const updated = current.map((c) =>
+        c.id === existing.id
+          ? {
+              ...c,
+              subcategories: mergedSubs,
+              description: description?.trim() || c.description,
+            }
+          : c
+      );
+      await saveCategories(updated);
       return { ...existing, subcategories: mergedSubs };
     }
     return existing;
@@ -212,7 +192,7 @@ export async function addCategory(
   };
 
   const updated = [...current, newCat];
-  saveCategories(updated);
+  await saveCategories(updated);
   return newCat;
 }
 
@@ -221,6 +201,8 @@ export async function updateCategory(
   updates: Partial<CategoryDefinition>
 ): Promise<void> {
   const current = getCategories();
+  const oldCategory = current.find((c) => c.id === id || c.slug === id);
+
   const updated = current.map((c) => {
     if (c.id === id || c.slug === id) {
       const next = { ...c, ...updates };
@@ -231,21 +213,134 @@ export async function updateCategory(
     }
     return c;
   });
-  saveCategories(updated);
+
+  await saveCategories(updated);
+
+  // If the category name changed, update all gallery items in DB & local storage
+  if (oldCategory && updates.name && updates.name !== oldCategory.name) {
+    const oldSlug = oldCategory.slug;
+    const oldNameLower = oldCategory.name.toLowerCase().trim();
+    const newName = updates.name.trim();
+
+    const localItems = getLocalItems();
+    let hasChanges = false;
+    const itemsToUpdateInDb: string[] = [];
+
+    const updatedItems = localItems.map((item) => {
+      const itemCatNorm = normalizeCategory(item.category || "");
+      const itemCatLower = (item.category || "").toLowerCase().trim();
+      if (itemCatNorm === oldSlug || itemCatLower === oldNameLower) {
+        hasChanges = true;
+        itemsToUpdateInDb.push(item.id);
+        return {
+          ...item,
+          category: newName,
+        };
+      }
+      return item;
+    });
+
+    if (hasChanges) {
+      saveLocalItems(updatedItems);
+
+      if (isFirebaseConfigured && db) {
+        for (const itemId of itemsToUpdateInDb) {
+          try {
+            const itemRef = doc(db, "gallery_items", itemId);
+            await updateDoc(itemRef, {
+              category: newName,
+            });
+          } catch (err) {
+            console.warn(`Firestore update item ${itemId} error on category rename:`, err);
+          }
+        }
+      }
+    }
+  }
 }
 
-export async function deleteCategory(id: string): Promise<void> {
+/**
+ * Permanently deletes a category from the database, and reassigns any existing
+ * photographs in this category to the primary remaining category so no items
+ * are orphaned or left resurrecting the deleted category.
+ */
+export async function deleteCategory(idOrSlug: string): Promise<void> {
   const current = getCategories();
-  const updated = current.filter((c) => c.id !== id && c.slug !== id);
-  saveCategories(updated);
+  const target = current.find(
+    (c) =>
+      c.id === idOrSlug ||
+      c.slug === idOrSlug ||
+      normalizeCategory(c.name) === normalizeCategory(idOrSlug)
+  );
+
+  const updated = current.filter(
+    (c) =>
+      c.id !== idOrSlug &&
+      c.slug !== idOrSlug &&
+      normalizeCategory(c.name) !== normalizeCategory(idOrSlug)
+  );
+
+  // 1. Save updated categories to Firestore and local storage
+  await saveCategories(updated);
+
+  // 2. Reassign all gallery items in DB that belonged to the deleted category
+  if (target) {
+    const deletedSlug = target.slug;
+    const deletedNameLower = target.name.toLowerCase().trim();
+    const fallbackCategory = updated[0]?.name || "People";
+
+    const localItems = getLocalItems();
+    let hasChanges = false;
+    const itemsToUpdateInDb: string[] = [];
+
+    const updatedItems = localItems.map((item) => {
+      const itemCatNorm = normalizeCategory(item.category || "");
+      const itemCatLower = (item.category || "").toLowerCase().trim();
+      if (itemCatNorm === deletedSlug || itemCatLower === deletedNameLower) {
+        hasChanges = true;
+        itemsToUpdateInDb.push(item.id);
+        return {
+          ...item,
+          category: fallbackCategory,
+          subcategory: "", // also clear subcategory so it's not orphaned
+        };
+      }
+      return item;
+    });
+
+    if (hasChanges) {
+      saveLocalItems(updatedItems);
+
+      if (isFirebaseConfigured && db) {
+        for (const itemId of itemsToUpdateInDb) {
+          try {
+            const itemRef = doc(db, "gallery_items", itemId);
+            await updateDoc(itemRef, {
+              category: fallbackCategory,
+              subcategory: "",
+            });
+          } catch (err) {
+            console.warn(`Firestore update item ${itemId} error on category delete:`, err);
+          }
+        }
+      }
+    }
+  }
 }
 
-export async function addSubcategory(categorySlugOrId: string, subcategoryName: string): Promise<void> {
+export async function addSubcategory(
+  categorySlugOrId: string,
+  subcategoryName: string
+): Promise<void> {
   const trimmedSub = subcategoryName.trim();
   if (!trimmedSub) return;
   const current = getCategories();
   const updated = current.map((c) => {
-    if (c.id === categorySlugOrId || c.slug === categorySlugOrId || c.name.toLowerCase() === categorySlugOrId.toLowerCase()) {
+    if (
+      c.id === categorySlugOrId ||
+      c.slug === categorySlugOrId ||
+      c.name.toLowerCase() === categorySlugOrId.toLowerCase()
+    ) {
       const existing = c.subcategories || [];
       if (!existing.some((s) => s.toLowerCase() === trimmedSub.toLowerCase())) {
         return { ...c, subcategories: [...existing, trimmedSub] };
@@ -253,27 +348,98 @@ export async function addSubcategory(categorySlugOrId: string, subcategoryName: 
     }
     return c;
   });
-  saveCategories(updated);
+  await saveCategories(updated);
 }
 
-export async function deleteSubcategory(categorySlugOrId: string, subcategoryName: string): Promise<void> {
-  const trimmedSub = subcategoryName.trim().toLowerCase();
+/**
+ * Permanently deletes a subcategory from a category in the database,
+ * and clears the subcategory tag from all gallery items in DB that had it.
+ */
+export async function deleteSubcategory(
+  categorySlugOrId: string,
+  subcategoryName: string
+): Promise<void> {
+  const trimmedSub = subcategoryName.trim();
+  const trimmedSubLower = trimmedSub.toLowerCase();
   const current = getCategories();
+
+  const targetCategory = current.find(
+    (c) =>
+      c.id === categorySlugOrId ||
+      c.slug === categorySlugOrId ||
+      c.name.toLowerCase() === categorySlugOrId.toLowerCase()
+  );
+
   const updated = current.map((c) => {
-    if (c.id === categorySlugOrId || c.slug === categorySlugOrId || c.name.toLowerCase() === categorySlugOrId.toLowerCase()) {
+    if (
+      c.id === categorySlugOrId ||
+      c.slug === categorySlugOrId ||
+      c.name.toLowerCase() === categorySlugOrId.toLowerCase()
+    ) {
       return {
         ...c,
-        subcategories: (c.subcategories || []).filter((s) => s.trim().toLowerCase() !== trimmedSub),
+        subcategories: (c.subcategories || []).filter(
+          (s) => s.trim().toLowerCase() !== trimmedSubLower
+        ),
       };
     }
     return c;
   });
-  saveCategories(updated);
+
+  // 1. Save updated categories to DB & local storage
+  await saveCategories(updated);
+
+  // 2. Clear subcategory field on all gallery items in DB
+  if (targetCategory) {
+    const targetSlug = targetCategory.slug;
+    const targetNameLower = targetCategory.name.toLowerCase().trim();
+
+    const localItems = getLocalItems();
+    let hasChanges = false;
+    const itemsToUpdateInDb: string[] = [];
+
+    const updatedItems = localItems.map((item) => {
+      const itemCatNorm = normalizeCategory(item.category || "");
+      const itemCatLower = (item.category || "").toLowerCase().trim();
+      const itemSub = (item.subcategory || "").trim().toLowerCase();
+      const itemSeries = (item.seriesOrProject || "").trim().toLowerCase();
+
+      const matchesCat = itemCatNorm === targetSlug || itemCatLower === targetNameLower;
+      const matchesSub = itemSub === trimmedSubLower || itemSeries === trimmedSubLower;
+
+      if (matchesCat && matchesSub) {
+        hasChanges = true;
+        itemsToUpdateInDb.push(item.id);
+        return {
+          ...item,
+          subcategory: "",
+        };
+      }
+      return item;
+    });
+
+    if (hasChanges) {
+      saveLocalItems(updatedItems);
+
+      if (isFirebaseConfigured && db) {
+        for (const itemId of itemsToUpdateInDb) {
+          try {
+            const itemRef = doc(db, "gallery_items", itemId);
+            await updateDoc(itemRef, {
+              subcategory: "",
+            });
+          } catch (err) {
+            console.warn(`Firestore update item ${itemId} error on subcategory delete:`, err);
+          }
+        }
+      }
+    }
+  }
 }
 
 export async function reorderCategories(newCategories: CategoryDefinition[]): Promise<void> {
   const indexed = newCategories.map((c, idx) => ({ ...c, orderIndex: idx }));
-  saveCategories(indexed);
+  await saveCategories(indexed);
 }
 
 // Backward-compatible adapter for existing components
@@ -285,31 +451,10 @@ export function getAllCategories(items?: GalleryItem[]): CategoryOption[] {
     map.set(c.slug, {
       key: c.slug,
       label: c.name,
-      subcategories: c.subcategories,
+      subcategories: c.subcategories || [],
       description: c.description,
+      count: c.count,
     });
-  }
-
-  // Also collect any dynamic categories assigned on items
-  if (items && Array.isArray(items)) {
-    for (const item of items) {
-      if (item.category) {
-        const norm = normalizeCategory(item.category);
-        const subName = (item.subcategory || item.seriesOrProject || "").trim();
-        if (!map.has(norm)) {
-          map.set(norm, {
-            key: norm,
-            label: getCategoryDisplayLabel(item.category),
-            subcategories: subName ? [subName] : [],
-          });
-        } else if (subName) {
-          const opt = map.get(norm)!;
-          if (opt.subcategories && !opt.subcategories.some((s) => s.toLowerCase() === subName.toLowerCase())) {
-            opt.subcategories.push(subName);
-          }
-        }
-      }
-    }
   }
 
   return Array.from(map.values());
@@ -317,7 +462,12 @@ export function getAllCategories(items?: GalleryItem[]): CategoryOption[] {
 
 export async function addCustomCategory(label: string): Promise<CategoryOption> {
   const cat = await addCategory(label);
-  return { key: cat.slug, label: cat.name, subcategories: cat.subcategories, description: cat.description };
+  return {
+    key: cat.slug,
+    label: cat.name,
+    subcategories: cat.subcategories,
+    description: cat.description,
+  };
 }
 
 // Shared subscriber set for categories
@@ -365,18 +515,33 @@ export function subscribeToCategories(
       const docRef = doc(db, "site_metadata", "categories_v3");
       globalCategoryFirestoreUnsub = onSnapshot(
         docRef,
-        (snap) => {
-          if (snap.exists() && snap.data()?.list) {
+        async (snap) => {
+          if (snap.exists() && Array.isArray(snap.data()?.list)) {
             const remoteList: CategoryDefinition[] = snap.data().list;
             inMemoryCategories = remoteList;
             try {
               localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(remoteList));
             } catch {}
             broadcastCategories(remoteList);
+          } else if (!snap.exists()) {
+            // Seed DB on first boot
+            try {
+              await setDoc(docRef, {
+                list: SEED_CATEGORIES,
+                updatedAt: new Date().toISOString(),
+              });
+              inMemoryCategories = SEED_CATEGORIES;
+              broadcastCategories(SEED_CATEGORIES);
+            } catch (seedErr) {
+              console.warn("Initial category seed notice:", seedErr);
+            }
           }
         },
         (err) => {
-          console.warn("Firestore categories notice (using local storage fallback):", err?.message || err);
+          console.warn(
+            "Firestore categories notice (using local storage fallback):",
+            err?.message || err
+          );
           broadcastCategories(getCategories());
         }
       );

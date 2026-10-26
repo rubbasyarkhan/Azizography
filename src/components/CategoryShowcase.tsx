@@ -130,6 +130,16 @@ export default function CategoryShowcase({
     return activeCategory?.subcategories || [];
   }, [activeCategory]);
 
+  // Sync selected subcategory if current subcategory was deleted
+  useEffect(() => {
+    if (
+      selectedSub !== "all" &&
+      !availableSubcategories.some((s) => s.toLowerCase() === selectedSub.toLowerCase())
+    ) {
+      setSelectedSub("all");
+    }
+  }, [availableSubcategories, selectedSub]);
+
   // Filter items matching selected category & subcategory
   const filteredCategoryItems = useMemo(() => {
     if (!activeCategory) return [];

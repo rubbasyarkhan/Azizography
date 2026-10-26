@@ -9,6 +9,7 @@ export interface CategoryDefinition {
   coverImageUrl?: string;
   orderIndex?: number;
   createdAt?: string;
+  count?: number;
 }
 
 export interface GalleryItem {

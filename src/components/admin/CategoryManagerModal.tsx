@@ -110,9 +110,10 @@ export default function CategoryManagerModal({
   const handleDeleteCategory = async (id: string, name: string) => {
     if (
       confirm(
-        `Are you sure you want to delete category "${name}" and its subcategories?`
+        `Are you sure you want to delete category "${name}" and its subcategories? Any photographs currently in this category will be moved to the primary collection.`
       )
     ) {
+      setCategories((prev) => prev.filter((c) => c.id !== id && c.slug !== id));
       await deleteCategory(id);
       showNotice(`Deleted category "${name}"`);
     }
@@ -122,12 +123,34 @@ export default function CategoryManagerModal({
     const subText = (newSubInputs[catId] || "").trim();
     if (!subText) return;
 
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId || c.slug === catId
+          ? {
+              ...c,
+              subcategories: Array.from(new Set([...(c.subcategories || []), subText])),
+            }
+          : c
+      )
+    );
     await addSubcategory(catId, subText);
     setNewSubInputs((prev) => ({ ...prev, [catId]: "" }));
     showNotice(`Added subcategory "${subText}"`);
   };
 
   const handleDeleteSub = async (catId: string, subName: string) => {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId || c.slug === catId
+          ? {
+              ...c,
+              subcategories: (c.subcategories || []).filter(
+                (s) => s.trim().toLowerCase() !== subName.trim().toLowerCase()
+              ),
+            }
+          : c
+      )
+    );
     await deleteSubcategory(catId, subName);
     showNotice(`Removed subcategory "${subName}"`);
   };

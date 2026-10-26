@@ -45,82 +45,49 @@ function Sidebar({
   const effectiveCategory = activeCategory || (activeFilter !== "all" ? activeFilter : "");
   const effectiveSub = activeSub || "";
 
-  // Group gallery items by category and collect subcategories under each category
+  // Group gallery items strictly by registered DB categories & subcategories
   const categoryGroups = useMemo<CategoryGroup[]>(() => {
     const allKnownCats = getAllCategories(items);
     const groupsMap = new Map<string, CategoryGroup>();
 
-    // 1. Initialize with registered categories
+    // 1. Initialize strictly with registered DB categories
     for (const cat of allKnownCats) {
+      const subList = (cat.subcategories || []).map((subName) => ({
+        name: subName,
+        count: 0,
+      }));
+
       groupsMap.set(cat.key, {
         key: cat.key,
         label: cat.label,
         count: 0,
-        subcategories: [],
+        subcategories: subList,
       });
     }
 
-    // 2. Tally items and collect subcategories
-    const subsPerCategory = new Map<string, Map<string, number>>();
-
+    // 2. Tally items and counts strictly for registered categories & subcategories
     for (const item of items) {
       if (item.isVisible === false) continue;
       const rawCat = item.category || "people";
       const catKey = normalizeCategory(rawCat);
 
-      if (!groupsMap.has(catKey)) {
-        groupsMap.set(catKey, {
-          key: catKey,
-          label: getCategoryDisplayLabel(rawCat),
-          count: 0,
-          subcategories: [],
-        });
-      }
+      const grp = groupsMap.get(catKey);
+      if (!grp) continue;
 
-      const grp = groupsMap.get(catKey)!;
       grp.count += 1;
 
-      const subName = (item.subcategory || item.seriesOrProject || "").trim();
-      if (subName) {
-        if (!subsPerCategory.has(catKey)) {
-          subsPerCategory.set(catKey, new Map<string, number>());
-        }
-        const sMap = subsPerCategory.get(catKey)!;
-        sMap.set(subName, (sMap.get(subName) || 0) + 1);
-      }
-    }
-
-    // Also include pre-configured subcategories from category definitions
-    for (const cat of allKnownCats) {
-      const catKey = cat.key;
-      if (cat.subcategories && cat.subcategories.length > 0) {
-        if (!subsPerCategory.has(catKey)) {
-          subsPerCategory.set(catKey, new Map<string, number>());
-        }
-        const sMap = subsPerCategory.get(catKey)!;
-        for (const s of cat.subcategories) {
-          if (!sMap.has(s)) {
-            sMap.set(s, 0);
-          }
+      const itemSub = (item.subcategory || item.seriesOrProject || "").trim().toLowerCase();
+      if (itemSub) {
+        const subEntry = grp.subcategories.find(
+          (s) => s.name.trim().toLowerCase() === itemSub
+        );
+        if (subEntry) {
+          subEntry.count += 1;
         }
       }
     }
 
-    // Attach sorted subcategories to each group
-    groupsMap.forEach((grp, catKey) => {
-      const sMap = subsPerCategory.get(catKey);
-      if (sMap && sMap.size > 0) {
-        grp.subcategories = Array.from(sMap.entries()).map(([name, count]) => ({
-          name,
-          count,
-        }));
-      }
-    });
-
-    // Only display categories with items (or all if archive is completely empty)
-    return Array.from(groupsMap.values()).filter(
-      (g) => g.count > 0 || items.length === 0
-    );
+    return Array.from(groupsMap.values());
   }, [items]);
 
   // Automatically expand category if active category or subcategory matches
